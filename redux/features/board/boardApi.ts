@@ -24,11 +24,16 @@ export const boardApi = baseApi.injectEndpoints({
         url: `/api/boards/${id}`,
         method: "GET",
       }),
-      providesTags: ["Board"],
+      providesTags: (_result, _error, id) => [
+        { type: "Board", id },
+      ],
     }),
 
     // POST /api/boards
-    createBoard: builder.mutation<BoardResponse, CreateBoardRequest>({
+    createBoard: builder.mutation<
+      BoardResponse,
+      CreateBoardRequest
+    >({
       query: (body) => ({
         url: "/api/boards",
         method: "POST",
@@ -40,18 +45,27 @@ export const boardApi = baseApi.injectEndpoints({
     // PATCH /api/boards/:id
     updateBoard: builder.mutation<
       BoardResponse,
-      { id: string; data: UpdateBoardRequest }
+      {
+        id: string;
+        data: UpdateBoardRequest;
+      }
     >({
       query: ({ id, data }) => ({
         url: `/api/boards/${id}`,
         method: "PATCH",
         body: data,
       }),
-      invalidatesTags: ["Board"],
+      invalidatesTags: (_result, _error, { id }) => [
+        "Board",
+        { type: "Board", id },
+      ],
     }),
 
     // DELETE /api/boards/:id
-    deleteBoard: builder.mutation<BoardResponse, string>({
+    deleteBoard: builder.mutation<
+      BoardResponse,
+      string
+    >({
       query: (id) => ({
         url: `/api/boards/${id}`,
         method: "DELETE",
