@@ -1,10 +1,29 @@
+export interface Assignee {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface ColumnTask {
+  id: string;
+  title: string;
+  description?: string | null;
+  position: number;
+  columnId: string;
+  assigneeId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assignee?: Assignee | null;
+}
+
 export interface Column {
   id: string;
   name: string;
-  order: number;
   boardId: string;
+  position: number;
   createdAt: string;
   updatedAt: string;
+  tasks: ColumnTask[];
 }
 
 export interface CreateColumnRequest {
@@ -17,7 +36,7 @@ export interface UpdateColumnRequest {
 }
 
 export interface ReorderColumnRequest {
-  order: number;
+  position: number;
 }
 
 export interface ColumnsResponse {
@@ -30,4 +49,18 @@ export interface ColumnResponse {
   success: boolean;
   message: string;
   data: Column;
+}
+
+export interface DeleteColumnResponse {
+  success: boolean;
+  message: string;
+  data: {
+    id: string;
+  };
+}
+
+export interface ReorderColumnsResponse {
+  success: boolean;
+  message: string;
+  data: Column[];
 }
