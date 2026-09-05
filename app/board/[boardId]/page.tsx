@@ -1,3 +1,6 @@
+
+
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -5,16 +8,17 @@ import { useParams, useRouter } from "next/navigation";
 
 import {
   ArrowLeft,
-  MoreHorizontal,
   Plus,
-  Pencil,
-  Trash2,
   X,
 } from "lucide-react";
 
+import { useGetBoardQuery } from "@/redux/features/board/boardApi";
+
 import {
-  useGetBoardQuery,
-} from "@/redux/features/board/boardApi";
+  useCreateTaskMutation,
+  useUpdateTaskMutation,
+  useDeleteTaskMutation,
+} from "@/redux/features/task/taskApi";
 
 import {
   useGetColumnsQuery,
@@ -23,56 +27,45 @@ import {
   useDeleteColumnMutation,
 } from "@/redux/features/column/columnApi";
 
-import { useAppSelector } from "@/redux/hooks";
+import {
+  useAppDispatch,
+  useAppSelector,
+} from "@/redux/hooks";
+
+import {
+  setToken,
+} from "@/redux/features/auth/authSlice";
+
+import type {
+  ColumnTask,
+} from "@/types/column";
+
+import type {
+  Column,
+} from "@/types/column";
+
+import KanbanBoard from "@/components/board/KanbanBoard";
 
 export default function BoardPage() {
   const router = useRouter();
+
   const params = useParams();
 
+  const dispatch = useAppDispatch();
+
   const boardId = params.boardId as string;
+
+  // =========================================================
+  // AUTH
+  // =========================================================
 
   const token = useAppSelector(
     (state) => state.auth.token
   );
 
-  const [showColumnModal, setShowColumnModal] =
-    useState(false);
-
-  const [columnName, setColumnName] = useState("");
-
-  const [editingColumnId, setEditingColumnId] =
-    useState<string | null>(null);
-
-  const [editingColumnName, setEditingColumnName] =
-    useState("");
-
-  const [deletingColumnId, setDeletingColumnId] =
-    useState<string | null>(null);
-
-  const {
-    data: boardData,
-    isLoading: boardLoading,
-    isError: boardError,
-  } = useGetBoardQuery(boardId, {
-    skip: !token || !boardId,
-  });
-
-  const {
-    data: columnsData,
-    isLoading: columnsLoading,
-    isError: columnsError,
-  } = useGetColumnsQuery(boardId, {
-    skip: !token || !boardId,
-  });
-
-  const [createColumn, { isLoading: creatingColumn }] =
-    useCreateColumnMutation();
-
-  const [updateColumn, { isLoading: updatingColumn }] =
-    useUpdateColumnMutation();
-
-  const [deleteColumn, { isLoading: deletingColumn }] =
-    useDeleteColumnMutation();
+  // =========================================================
+  // AUTH HYDRATION
+  // =========================================================
 
   useEffect(() => {
     const storedToken =
@@ -80,339 +73,859 @@ export default function BoardPage() {
 
     if (!storedToken) {
       router.replace("/login");
-    }
-  }, [router]);
-
-  const board = boardData?.data;
-  const columns = columnsData?.data ?? [];
-
-  const handleCreateColumn = async () => {
-    const name = columnName.trim();
-
-    if (!name) {
       return;
     }
 
-    try {
-      await createColumn({
-        boardId,
-        name,
-      }).unwrap();
-
-      setColumnName("");
-      setShowColumnModal(false);
-    } catch (error) {
-      console.error(
-        "Failed to create column:",
-        error
-      );
+    if (!token) {
+      dispatch(setToken(storedToken));
     }
-  };
+  }, [
+    router,
+    token,
+    dispatch,
+  ]);
 
-  const handleUpdateColumn = async () => {
-    const name = editingColumnName.trim();
+  // =========================================================
+  // BOARD
+  // =========================================================
 
-    if (!editingColumnId || !name) {
-      return;
-    }
+  const {
+    data: boardData,
+    isLoading: boardLoading,
+    isError: boardError,
+  } = useGetBoardQuery(boardId, {
+    skip:
+      !token ||
+      !boardId,
+  });
 
-    try {
-      await updateColumn({
-        columnId: editingColumnId,
-        boardId,
-        data: {
+  // =========================================================
+  // COLUMNS
+  // =========================================================
+
+  const {
+    data: columnsData,
+    isLoading: columnsLoading,
+    isError: columnsError,
+  } = useGetColumnsQuery(boardId, {
+    skip:
+      !token ||
+      !boardId,
+  });
+
+  // =========================================================
+  // COLUMN MUTATIONS
+  // =========================================================
+
+  const [
+    createColumn,
+    {
+      isLoading: creatingColumn,
+    },
+  ] = useCreateColumnMutation();
+
+  const [
+    updateColumn,
+    {
+      isLoading: updatingColumn,
+    },
+  ] = useUpdateColumnMutation();
+
+  const [
+    deleteColumn,
+    {
+      isLoading: deletingColumn,
+    },
+  ] = useDeleteColumnMutation();
+
+  // =========================================================
+  // COLUMN STATE
+  // =========================================================
+
+  const [
+    showColumnModal,
+    setShowColumnModal,
+  ] = useState(false);
+
+  const [
+    columnName,
+    setColumnName,
+  ] = useState("");
+
+  const [
+    editingColumnId,
+    setEditingColumnId,
+  ] = useState<string | null>(null);
+
+  const [
+    editingColumnName,
+    setEditingColumnName,
+  ] = useState("");
+
+  const [
+    deletingColumnId,
+    setDeletingColumnId,
+  ] = useState<string | null>(null);
+
+  // =========================================================
+  // TASK CREATE STATE
+  // =========================================================
+
+  const [
+    showTaskModal,
+    setShowTaskModal,
+  ] = useState(false);
+
+  const [
+    selectedColumnId,
+    setSelectedColumnId,
+  ] = useState<string | null>(null);
+
+  const [
+    taskTitle,
+    setTaskTitle,
+  ] = useState("");
+
+  const [
+    taskDescription,
+    setTaskDescription,
+  ] = useState("");
+
+  const [
+    taskPriority,
+    setTaskPriority,
+  ] = useState<
+    "LOW" | "MEDIUM" | "HIGH"
+  >("MEDIUM");
+
+  // =========================================================
+  // TASK EDIT STATE
+  // =========================================================
+
+  const [
+    editingTask,
+    setEditingTask,
+  ] = useState<ColumnTask | null>(null);
+
+  const [
+    editTaskTitle,
+    setEditTaskTitle,
+  ] = useState("");
+
+  const [
+    editTaskDescription,
+    setEditTaskDescription,
+  ] = useState("");
+
+  const [
+    editTaskPriority,
+    setEditTaskPriority,
+  ] = useState<
+    "LOW" | "MEDIUM" | "HIGH"
+  >("MEDIUM");
+
+  const [
+    editTaskStatus,
+    setEditTaskStatus,
+  ] = useState<
+    "TODO" |
+    "IN_PROGRESS" |
+    "DONE"
+  >("TODO");
+
+  // =========================================================
+  // TASK DELETE STATE
+  // =========================================================
+
+  const [
+    deletingTaskId,
+    setDeletingTaskId,
+  ] = useState<string | null>(null);
+
+  // =========================================================
+  // TASK MUTATIONS
+  // =========================================================
+
+  const [
+    createTask,
+    {
+      isLoading: creatingTask,
+    },
+  ] = useCreateTaskMutation();
+
+  const [
+    updateTask,
+    {
+      isLoading: updatingTask,
+    },
+  ] = useUpdateTaskMutation();
+
+  const [
+    deleteTask,
+    {
+      isLoading: deletingTask,
+    },
+  ] = useDeleteTaskMutation();
+
+  // =========================================================
+  // DATA
+  // =========================================================
+
+  const board =
+    boardData?.data;
+
+  const columns =
+    columnsData?.data ?? [];
+
+  // =========================================================
+  // CREATE COLUMN
+  // =========================================================
+
+  const handleCreateColumn =
+    async () => {
+      const name =
+        columnName.trim();
+
+      if (!name) {
+        return;
+      }
+
+      try {
+        await createColumn({
+          boardId,
           name,
-        },
-      }).unwrap();
+        }).unwrap();
 
-      setEditingColumnId(null);
-      setEditingColumnName("");
-    } catch (error) {
-      console.error(
-        "Failed to update column:",
-        error
+        setColumnName("");
+
+        setShowColumnModal(
+          false
+        );
+      } catch (error) {
+        console.error(
+          "Failed to create column:",
+          error
+        );
+      }
+    };
+
+  // =========================================================
+  // UPDATE COLUMN
+  // =========================================================
+
+  const handleUpdateColumn =
+    async () => {
+      const name =
+        editingColumnName.trim();
+
+      if (
+        !editingColumnId ||
+        !name
+      ) {
+        return;
+      }
+
+      try {
+        await updateColumn({
+          columnId:
+            editingColumnId,
+
+          boardId,
+
+          data: {
+            name,
+          },
+        }).unwrap();
+
+        setEditingColumnId(
+          null
+        );
+
+        setEditingColumnName(
+          ""
+        );
+      } catch (error) {
+        console.error(
+          "Failed to update column:",
+          error
+        );
+      }
+    };
+
+  // =========================================================
+  // DELETE COLUMN
+  // =========================================================
+
+  const handleDeleteColumn =
+    async () => {
+      if (
+        !deletingColumnId
+      ) {
+        return;
+      }
+
+      try {
+        await deleteColumn({
+          columnId:
+            deletingColumnId,
+
+          boardId,
+        }).unwrap();
+
+        setDeletingColumnId(
+          null
+        );
+      } catch (error) {
+        console.error(
+          "Failed to delete column:",
+          error
+        );
+
+        alert(
+          "This column cannot be deleted. Make sure it has no tasks."
+        );
+      }
+    };
+
+  // =========================================================
+  // OPEN CREATE TASK MODAL
+  // =========================================================
+
+  const openCreateTaskModal =
+    (columnId: string) => {
+      setSelectedColumnId(
+        columnId
       );
-    }
-  };
 
-  const handleDeleteColumn = async () => {
-    if (!deletingColumnId) {
-      return;
-    }
+      setTaskTitle("");
 
-    try {
-      await deleteColumn({
-        columnId: deletingColumnId,
-        boardId,
-      }).unwrap();
+      setTaskDescription("");
 
-      setDeletingColumnId(null);
-    } catch (error) {
-      console.error(
-        "Failed to delete column:",
-        error
+      setTaskPriority(
+        "MEDIUM"
       );
 
-      alert(
-        "This column cannot be deleted. Make sure it has no tasks."
+      setShowTaskModal(
+        true
       );
-    }
-  };
+    };
 
-  if (boardLoading || columnsLoading) {
+  // =========================================================
+  // CREATE TASK
+  // =========================================================
+
+  const handleCreateTask =
+    async () => {
+      const title =
+        taskTitle.trim();
+
+      if (
+        !title ||
+        !selectedColumnId
+      ) {
+        return;
+      }
+
+      try {
+        await createTask({
+          boardId,
+
+          columnId:
+            selectedColumnId,
+
+          title,
+
+          description:
+            taskDescription.trim(),
+
+          priority:
+            taskPriority,
+        }).unwrap();
+
+        setTaskTitle("");
+
+        setTaskDescription("");
+
+        setTaskPriority(
+          "MEDIUM"
+        );
+
+        setSelectedColumnId(
+          null
+        );
+
+        setShowTaskModal(
+          false
+        );
+      } catch (error) {
+        console.error(
+          "Failed to create task:",
+          error
+        );
+      }
+    };
+
+  // =========================================================
+  // OPEN EDIT TASK MODAL
+  // =========================================================
+
+  const openEditTaskModal =
+    (task: ColumnTask) => {
+      setEditingTask(task);
+
+      setEditTaskTitle(
+        task.title
+      );
+
+      setEditTaskDescription(
+        task.description ?? ""
+      );
+
+      setEditTaskPriority(
+        task.priority
+      );
+
+      setEditTaskStatus(
+        task.status
+      );
+    };
+
+  // =========================================================
+  // UPDATE TASK
+  // =========================================================
+
+  const handleUpdateTask =
+    async () => {
+      if (!editingTask) {
+        return;
+      }
+
+      const title =
+        editTaskTitle.trim();
+
+      if (!title) {
+        return;
+      }
+
+      try {
+        await updateTask({
+          taskId:
+            editingTask.id,
+
+          boardId,
+
+          data: {
+            title,
+
+            description:
+              editTaskDescription.trim(),
+
+            priority:
+              editTaskPriority,
+
+            status:
+              editTaskStatus,
+          },
+        }).unwrap();
+
+        setEditingTask(
+          null
+        );
+
+        setEditTaskTitle("");
+
+        setEditTaskDescription("");
+
+        setEditTaskPriority(
+          "MEDIUM"
+        );
+
+        setEditTaskStatus(
+          "TODO"
+        );
+      } catch (error) {
+        console.error(
+          "Failed to update task:",
+          error
+        );
+      }
+    };
+
+  // =========================================================
+  // DELETE TASK
+  // =========================================================
+
+  const handleDeleteTask =
+    async () => {
+      if (!deletingTaskId) {
+        return;
+      }
+
+      try {
+        await deleteTask({
+          taskId:
+            deletingTaskId,
+
+          boardId,
+        }).unwrap();
+
+        setDeletingTaskId(
+          null
+        );
+      } catch (error) {
+        console.error(
+          "Failed to delete task:",
+          error
+        );
+
+        alert(
+          "Failed to delete task."
+        );
+      }
+    };
+
+  // =========================================================
+  // LOADING
+  // =========================================================
+
+  if (
+    boardLoading ||
+    columnsLoading
+  ) {
     return (
-      <main className="min-h-screen bg-gray-50 p-6">
+      <main className="min-h-screen bg-slate-900 p-6">
         <div className="mx-auto max-w-7xl">
           <div className="animate-pulse space-y-6">
-            <div className="h-8 w-48 rounded bg-gray-200" />
-            <div className="h-5 w-96 rounded bg-gray-200" />
 
-            <div className="grid gap-5 md:grid-cols-3">
-              {[1, 2, 3].map((item) => (
-                <div
-                  key={item}
-                  className="h-80 rounded-xl bg-gray-200"
-                />
-              ))}
+            <div className="h-8 w-48 rounded bg-slate-700" />
+
+            <div className="h-5 w-96 rounded bg-slate-700" />
+
+            <div className="flex gap-5 overflow-hidden">
+              {[1, 2, 3].map(
+                (item) => (
+                  <div
+                    key={item}
+                    className="h-96 w-80 shrink-0 rounded-xl bg-slate-800"
+                  />
+                )
+              )}
             </div>
+
           </div>
         </div>
       </main>
     );
   }
 
-  if (boardError || columnsError || !board) {
+  // =========================================================
+  // ERROR
+  // =========================================================
+
+  if (
+    boardError ||
+    columnsError ||
+    !board
+  ) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
+      <main className="flex min-h-screen items-center justify-center bg-slate-900 p-6">
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-gray-900">
+
+          <h1 className="text-xl font-semibold text-white">
             Unable to load board
           </h1>
 
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-slate-400">
             You may not have access to this board.
           </p>
 
           <button
-            onClick={() => router.push("/dashboard")}
-            className="mt-5 rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white"
+            type="button"
+            onClick={() =>
+              router.push(
+                "/dashboard"
+              )
+            }
+            className="mt-5 rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-slate-900"
           >
             Back to Dashboard
           </button>
+
         </div>
       </main>
     );
   }
 
+  // =========================================================
+  // UI
+  // =========================================================
+
   return (
-    <main className="min-h-screen bg-slate-900 ">
-      {/* Header */}
+    <main className="min-h-screen bg-slate-900">
+
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
       <header className="border-b border-slate-800 bg-slate-900">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+
           <button
-            onClick={() => router.push("/dashboard")}
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-white"
+            type="button"
+            onClick={() =>
+              router.push(
+                "/dashboard"
+              )
+            }
+            className="flex items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-white"
           >
             <ArrowLeft size={18} />
+
             Dashboard
           </button>
 
           <button
+            type="button"
             onClick={() => {
-              localStorage.removeItem("token");
-              router.replace("/login");
+              localStorage.removeItem(
+                "token"
+              );
+
+              router.replace(
+                "/login"
+              );
             }}
-            className="text-sm font-medium text-red-600 hover:text-red-700"
+            className="text-sm font-medium text-red-500 transition hover:text-red-400"
           >
             Logout
           </button>
+
         </div>
       </header>
 
-      {/* Board information */}
+      {/* =====================================================
+          BOARD INFO
+      ===================================================== */}
+
       <section className="mx-auto max-w-7xl px-6 pb-6 pt-8">
-        <h1 className="text-3xl font-bold text-gray-900">
+
+        <h1 className="text-3xl font-bold text-white">
           {board.name}
         </h1>
 
         {board.description && (
-          <p className="mt-2 max-w-2xl text-gray-500">
+          <p className="mt-2 max-w-2xl text-slate-400">
             {board.description}
           </p>
         )}
+
       </section>
 
-      {/* Kanban */}
-      <section className="mx-auto max-w-7xl overflow-x-auto px-6 pb-10">
-        <div className="flex min-w-max gap-5">
-          {columns.map((column) => (
-            <div
-              key={column.id}
-              className="w-80 shrink-0 rounded-xl bg-gray-100 p-4"
-            >
-              {/* Column header */}
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold text-gray-900">
-                    {column.name}
-                  </h2>
+      {/* =====================================================
+          KANBAN
+      ===================================================== */}
 
-                  <p className="mt-1 text-xs text-gray-500">
-                    {column.tasks.length}{" "}
-                    {column.tasks.length === 1
-                      ? "task"
-                      : "tasks"}
-                  </p>
-                </div>
+      <section className="mx-auto max-w-7xl px-6 pb-10">
 
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => {
-                      setEditingColumnId(
-                        column.id
-                      );
-                      setEditingColumnName(
-                        column.name
-                      );
-                    }}
-                    className="rounded-md p-2 text-gray-500 hover:bg-white hover:text-gray-900"
-                  >
-                    <Pencil size={16} />
-                  </button>
+        <div className="flex items-start gap-5">
 
-                  <button
-                    onClick={() =>
-                      setDeletingColumnId(
-                        column.id
-                      )
-                    }
-                    className="rounded-md p-2 text-gray-500 hover:bg-white hover:text-red-600"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+          {/* =================================================
+              KANBAN BOARD
+          ================================================= */}
 
-                  <button className="rounded-md p-2 text-gray-500 hover:bg-white">
-                    <MoreHorizontal size={16} />
-                  </button>
-                </div>
-              </div>
+          <div className="min-w-0 flex-1">
+            <KanbanBoard
+              columns={columns}
 
-              {/* Tasks placeholder */}
-              <div className="space-y-3">
-                {column.tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="rounded-lg border bg-white p-4 shadow-sm"
-                  >
-                    <p className="font-medium text-gray-900">
-                      {task.title}
-                    </p>
+              onAddTask={
+                openCreateTaskModal
+              }
 
-                    {task.description && (
-                      <p className="mt-1 text-sm text-gray-500">
-                        {task.description}
-                      </p>
-                    )}
+              onEditColumn={(
+                column: Column
+              ) => {
+                setEditingColumnId(
+                  column.id
+                );
 
-                    {task.assignee && (
-                      <div className="mt-3 text-xs text-gray-500">
-                        Assigned to{" "}
-                        {task.assignee.name}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                setEditingColumnName(
+                  column.name
+                );
+              }}
 
-              {/* Add task */}
-              <button className="mt-4 flex w-full items-center gap-2 rounded-lg p-2 text-sm font-medium text-gray-500 hover:bg-white hover:text-gray-900">
-                <Plus size={17} />
-                Add Task
-              </button>
-            </div>
-          ))}
+              onDeleteColumn={(
+                columnId: string
+              ) => {
+                setDeletingColumnId(
+                  columnId
+                );
+              }}
 
-          {/* Add Column */}
+              onEditTask={
+                openEditTaskModal
+              }
+
+              onDeleteTask={(
+                taskId: string
+              ) => {
+                setDeletingTaskId(
+                  taskId
+                );
+              }}
+            />
+          </div>
+
+          {/* =================================================
+              ADD COLUMN
+          ================================================= */}
+
           <button
+            type="button"
             onClick={() =>
-              setShowColumnModal(true)
+              setShowColumnModal(
+                true
+              )
             }
-            className="flex h-fit w-80 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-white p-5 text-sm font-medium text-gray-500 hover:border-gray-400 hover:text-gray-900"
+            className="flex h-fit w-80 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-700 bg-slate-800 p-5 text-sm font-medium text-slate-400 transition hover:border-slate-500 hover:text-white"
           >
             <Plus size={18} />
+
             Add Column
           </button>
+
         </div>
+
       </section>
 
-      {/* Create Column Modal */}
+      {/* =====================================================
+          CREATE COLUMN MODAL
+      ===================================================== */}
+
       {showColumnModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">
+
+              <h2 className="text-lg font-semibold text-slate-900">
                 Create Column
               </h2>
 
               <button
-                onClick={() =>
-                  setShowColumnModal(false)
-                }
-                className="rounded-md p-2 hover:bg-gray-100"
+                type="button"
+                onClick={() => {
+                  setShowColumnModal(
+                    false
+                  );
+
+                  setColumnName("");
+                }}
+                className="rounded-md p-2 hover:bg-slate-100"
               >
                 <X size={18} />
               </button>
+
             </div>
 
             <input
               value={columnName}
               onChange={(e) =>
-                setColumnName(e.target.value)
+                setColumnName(
+                  e.target.value
+                )
               }
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                if (
+                  e.key === "Enter"
+                ) {
                   handleCreateColumn();
+                }
+
+                if (
+                  e.key === "Escape"
+                ) {
+                  setShowColumnModal(
+                    false
+                  );
                 }
               }}
               placeholder="Column name"
-              className="mt-5 w-full rounded-lg border px-4 py-3 text-sm outline-none focus:border-gray-900"
+              className="mt-5 w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
               autoFocus
             />
 
             <div className="mt-5 flex justify-end gap-3">
+
               <button
-                onClick={() =>
-                  setShowColumnModal(false)
-                }
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100"
+                type="button"
+                onClick={() => {
+                  setShowColumnModal(
+                    false
+                  );
+
+                  setColumnName("");
+                }}
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
               >
                 Cancel
               </button>
 
               <button
-                onClick={handleCreateColumn}
+                type="button"
+                onClick={
+                  handleCreateColumn
+                }
                 disabled={
                   creatingColumn ||
                   !columnName.trim()
                 }
-                className="rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {creatingColumn
                   ? "Creating..."
                   : "Create Column"}
               </button>
+
             </div>
+
           </div>
+
         </div>
       )}
 
-      {/* Rename Column Modal */}
+      {/* =====================================================
+          RENAME COLUMN MODAL
+      ===================================================== */}
+
       {editingColumnId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold">
-              Rename Column
-            </h2>
+
+            <div className="flex items-center justify-between">
+
+              <h2 className="text-lg font-semibold text-slate-900">
+                Rename Column
+              </h2>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingColumnId(
+                    null
+                  );
+
+                  setEditingColumnName(
+                    ""
+                  );
+                }}
+                className="rounded-md p-2 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+
+            </div>
 
             <input
               value={editingColumnName}
@@ -422,78 +935,533 @@ export default function BoardPage() {
                 )
               }
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                if (
+                  e.key === "Enter"
+                ) {
                   handleUpdateColumn();
                 }
+
+                if (
+                  e.key === "Escape"
+                ) {
+                  setEditingColumnId(
+                    null
+                  );
+
+                  setEditingColumnName(
+                    ""
+                  );
+                }
               }}
-              className="mt-5 w-full rounded-lg border px-4 py-3 text-sm outline-none focus:border-gray-900"
+              className="mt-5 w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
               autoFocus
             />
 
             <div className="mt-5 flex justify-end gap-3">
+
               <button
+                type="button"
                 onClick={() => {
-                  setEditingColumnId(null);
-                  setEditingColumnName("");
+                  setEditingColumnId(
+                    null
+                  );
+
+                  setEditingColumnName(
+                    ""
+                  );
                 }}
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100"
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
               >
                 Cancel
               </button>
 
               <button
-                onClick={handleUpdateColumn}
+                type="button"
+                onClick={
+                  handleUpdateColumn
+                }
                 disabled={
                   updatingColumn ||
                   !editingColumnName.trim()
                 }
-                className="rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {updatingColumn
                   ? "Saving..."
                   : "Save Changes"}
               </button>
+
             </div>
+
           </div>
+
         </div>
       )}
 
-      {/* Delete Column Modal */}
-      {deletingColumnId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Delete Column?
-            </h2>
+      {/* =====================================================
+          DELETE COLUMN MODAL
+      ===================================================== */}
 
-            <p className="mt-2 text-sm text-gray-500">
-              This column can only be deleted when
-              it has no tasks.
+      {deletingColumnId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+
+            <div className="flex items-center justify-between">
+
+              <h2 className="text-lg font-semibold text-slate-900">
+                Delete Column?
+              </h2>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setDeletingColumnId(
+                    null
+                  )
+                }
+                className="rounded-md p-2 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+
+            </div>
+
+            <p className="mt-3 text-sm leading-6 text-slate-500">
+              This column can only be deleted
+              when it has no tasks.
             </p>
 
-            <div className="mt-5 flex justify-end gap-3">
+            <div className="mt-6 flex justify-end gap-3">
+
               <button
+                type="button"
                 onClick={() =>
-                  setDeletingColumnId(null)
+                  setDeletingColumnId(
+                    null
+                  )
                 }
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100"
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
               >
                 Cancel
               </button>
 
               <button
-                onClick={handleDeleteColumn}
-                disabled={deletingColumn}
-                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                type="button"
+                onClick={
+                  handleDeleteColumn
+                }
+                disabled={
+                  deletingColumn
+                }
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {deletingColumn
                   ? "Deleting..."
                   : "Delete Column"}
               </button>
+
             </div>
+
           </div>
+
         </div>
       )}
+
+      {/* =====================================================
+          CREATE TASK MODAL
+      ===================================================== */}
+
+      {showTaskModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+
+            <div className="flex items-center justify-between">
+
+              <h2 className="text-lg font-semibold text-slate-900">
+                Create Task
+              </h2>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTaskModal(
+                    false
+                  );
+
+                  setSelectedColumnId(
+                    null
+                  );
+                }}
+                className="rounded-md p-2 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+
+            </div>
+
+            <div className="mt-5 space-y-4">
+
+              {/* Title */}
+
+              <input
+                value={taskTitle}
+                onChange={(e) =>
+                  setTaskTitle(
+                    e.target.value
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (
+                    e.key === "Enter" &&
+                    taskTitle.trim()
+                  ) {
+                    handleCreateTask();
+                  }
+                }}
+                placeholder="Task title"
+                className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
+                autoFocus
+              />
+
+              {/* Description */}
+
+              <textarea
+                value={taskDescription}
+                onChange={(e) =>
+                  setTaskDescription(
+                    e.target.value
+                  )
+                }
+                placeholder="Description (optional)"
+                rows={4}
+                className="w-full resize-none rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
+              />
+
+              {/* Priority */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Priority
+                </label>
+
+                <select
+                  value={taskPriority}
+                  onChange={(e) =>
+                    setTaskPriority(
+                      e.target.value as
+                        | "LOW"
+                        | "MEDIUM"
+                        | "HIGH"
+                    )
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
+                >
+                  <option value="LOW">
+                    Low Priority
+                  </option>
+
+                  <option value="MEDIUM">
+                    Medium Priority
+                  </option>
+
+                  <option value="HIGH">
+                    High Priority
+                  </option>
+                </select>
+
+              </div>
+
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTaskModal(
+                    false
+                  );
+
+                  setSelectedColumnId(
+                    null
+                  );
+                }}
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  handleCreateTask
+                }
+                disabled={
+                  creatingTask ||
+                  !taskTitle.trim()
+                }
+                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {creatingTask
+                  ? "Creating..."
+                  : "Create Task"}
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =====================================================
+          EDIT TASK MODAL
+      ===================================================== */}
+
+      {editingTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+
+            <div className="flex items-center justify-between">
+
+              <h2 className="text-lg font-semibold text-slate-900">
+                Edit Task
+              </h2>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setEditingTask(
+                    null
+                  )
+                }
+                className="rounded-md p-2 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+
+            </div>
+
+            <div className="mt-5 space-y-4">
+
+              {/* Title */}
+
+              <input
+                value={editTaskTitle}
+                onChange={(e) =>
+                  setEditTaskTitle(
+                    e.target.value
+                  )
+                }
+                className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
+                placeholder="Task title"
+                autoFocus
+              />
+
+              {/* Description */}
+
+              <textarea
+                value={
+                  editTaskDescription
+                }
+                onChange={(e) =>
+                  setEditTaskDescription(
+                    e.target.value
+                  )
+                }
+                placeholder="Description"
+                rows={4}
+                className="w-full resize-none rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
+              />
+
+              {/* Priority */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Priority
+                </label>
+
+                <select
+                  value={
+                    editTaskPriority
+                  }
+                  onChange={(e) =>
+                    setEditTaskPriority(
+                      e.target.value as
+                        | "LOW"
+                        | "MEDIUM"
+                        | "HIGH"
+                    )
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
+                >
+                  <option value="LOW">
+                    Low Priority
+                  </option>
+
+                  <option value="MEDIUM">
+                    Medium Priority
+                  </option>
+
+                  <option value="HIGH">
+                    High Priority
+                  </option>
+                </select>
+
+              </div>
+
+              {/* Status */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Status
+                </label>
+
+                <select
+                  value={
+                    editTaskStatus
+                  }
+                  onChange={(e) =>
+                    setEditTaskStatus(
+                      e.target.value as
+                        | "TODO"
+                        | "IN_PROGRESS"
+                        | "DONE"
+                    )
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
+                >
+                  <option value="TODO">
+                    To Do
+                  </option>
+
+                  <option value="IN_PROGRESS">
+                    In Progress
+                  </option>
+
+                  <option value="DONE">
+                    Done
+                  </option>
+                </select>
+
+              </div>
+
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+
+              <button
+                type="button"
+                onClick={() =>
+                  setEditingTask(
+                    null
+                  )
+                }
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  handleUpdateTask
+                }
+                disabled={
+                  updatingTask ||
+                  !editTaskTitle.trim()
+                }
+                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {updatingTask
+                  ? "Saving..."
+                  : "Save Changes"}
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =====================================================
+          DELETE TASK MODAL
+      ===================================================== */}
+
+      {deletingTaskId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+
+            <div className="flex items-center justify-between">
+
+              <h2 className="text-lg font-semibold text-slate-900">
+                Delete Task?
+              </h2>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setDeletingTaskId(
+                    null
+                  )
+                }
+                className="rounded-md p-2 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+
+            </div>
+
+            <p className="mt-3 text-sm leading-6 text-slate-500">
+              Are you sure you want to delete
+              this task? This action cannot be
+              undone.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+
+              <button
+                type="button"
+                onClick={() =>
+                  setDeletingTaskId(
+                    null
+                  )
+                }
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  handleDeleteTask
+                }
+                disabled={
+                  deletingTask
+                }
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {deletingTask
+                  ? "Deleting..."
+                  : "Delete Task"}
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
     </main>
   );
 }
