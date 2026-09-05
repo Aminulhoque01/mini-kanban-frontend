@@ -7,10 +7,12 @@ export const baseApi = createApi({
     baseUrl: process.env.NEXT_PUBLIC_API_URL,
 
     prepareHeaders: (headers) => {
-      const token = localStorage.getItem("token");
+      if (typeof window !== "undefined") {
+        const token = localStorage.getItem("token");
 
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
+        if (token) {
+          headers.set("Authorization", `Bearer ${token}`);
+        }
       }
 
       headers.set("Content-Type", "application/json");
@@ -19,13 +21,7 @@ export const baseApi = createApi({
     },
   }),
 
-  tagTypes: [
-    "Auth",
-    "Board",
-    "Column",
-    "Task",
-    "User",
-  ],
+  tagTypes: ["Auth", "Board", "Column", "Task", "User"],
 
   endpoints: () => ({}),
 });
