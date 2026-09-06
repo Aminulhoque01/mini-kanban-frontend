@@ -1,13 +1,9 @@
-
-
-
-
-
 "use client";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
+import { useGetUsersQuery } from "@/redux/features/auth/authApi";
 
 import {
   ArrowLeft,
@@ -40,24 +36,61 @@ import {
   useRemoveBoardMemberMutation,
 } from "@/redux/features/board/boardMemberApi";
 
-import {
-  useAppDispatch,
-  useAppSelector,
-} from "@/redux/hooks";
-
-
+import { useAppSelector } from "@/redux/hooks";
 
 import type { ColumnTask, Column } from "@/types/column";
 
 import KanbanBoard from "@/components/board/KanbanBoard";
 import { setToken } from "@/redux/features/auth/authSlice";
+import { toast } from "sonner";
+
+
+// =========================================================
+// TYPES
+// =========================================================
+
+type Priority = "LOW" | "MEDIUM" | "HIGH";
+
+type TaskStatus =
+  | "TODO"
+  | "IN_PROGRESS"
+  | "DONE";
+
+type TaskWithAssignee = ColumnTask & {
+  assignee?: {
+    id: string;
+    name: string;
+    email?: string;
+  } | null;
+};
+
+
+// =========================================================
+// PAGE
+// =========================================================
 
 export default function BoardPage() {
   const router = useRouter();
   const params = useParams();
+  const dispatch = useDispatch();
 
   const boardId = params.boardId as string;
-    const dispatch = useDispatch();
+
+    const {
+    data: usersData,
+    isLoading: usersLoading,
+    isError: usersError,
+  } = useGetUsersQuery(
+    {
+      page: 1,
+      limit: 100,
+    },
+    
+  );
+
+  const allUsers = usersData?.data ?? [];
+
+
 
   // =========================================================
   // AUTH
@@ -67,12 +100,14 @@ export default function BoardPage() {
     (state) => state.auth.token
   );
 
+
   // =========================================================
   // AUTH HYDRATION
   // =========================================================
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("token");
+    const storedToken =
+      localStorage.getItem("token");
 
     if (!storedToken) {
       router.replace("/login");
@@ -83,6 +118,7 @@ export default function BoardPage() {
       dispatch(setToken(storedToken));
     }
   }, [router, token, dispatch]);
+
 
   // =========================================================
   // BOARD
@@ -96,6 +132,7 @@ export default function BoardPage() {
     skip: !token || !boardId,
   });
 
+
   // =========================================================
   // COLUMNS
   // =========================================================
@@ -107,6 +144,7 @@ export default function BoardPage() {
   } = useGetColumnsQuery(boardId, {
     skip: !token || !boardId,
   });
+
 
   // =========================================================
   // BOARD MEMBERS
@@ -120,12 +158,14 @@ export default function BoardPage() {
     skip: !token || !boardId,
   });
 
+
   const [
     addMember,
     {
       isLoading: addingMember,
     },
   ] = useAddBoardMemberMutation();
+
 
   const [
     removeMember,
@@ -134,8 +174,9 @@ export default function BoardPage() {
     },
   ] = useRemoveBoardMemberMutation();
 
+
   // =========================================================
-  // MEMBERS STATE
+  // MEMBER STATE
   // =========================================================
 
   const [
@@ -158,6 +199,7 @@ export default function BoardPage() {
     setRemovingMemberId,
   ] = useState<string | null>(null);
 
+
   // =========================================================
   // COLUMN MUTATIONS
   // =========================================================
@@ -169,6 +211,7 @@ export default function BoardPage() {
     },
   ] = useCreateColumnMutation();
 
+
   const [
     updateColumn,
     {
@@ -176,12 +219,22 @@ export default function BoardPage() {
     },
   ] = useUpdateColumnMutation();
 
+
   const [
     deleteColumn,
     {
       isLoading: deletingColumn,
     },
   ] = useDeleteColumnMutation();
+
+
+  const [
+    reorderColumn,
+    {
+      isLoading: reorderingColumn,
+    },
+  ] = useReorderColumnMutation();
+
 
   // =========================================================
   // COLUMN STATE
@@ -212,8 +265,37 @@ export default function BoardPage() {
     setDeletingColumnId,
   ] = useState<string | null>(null);
 
+
   // =========================================================
-  // TASK CREATE STATE
+  // TASK MUTATIONS
+  // =========================================================
+
+  const [
+    createTask,
+    {
+      isLoading: creatingTask,
+    },
+  ] = useCreateTaskMutation();
+
+
+  const [
+    updateTask,
+    {
+      isLoading: updatingTask,
+    },
+  ] = useUpdateTaskMutation();
+
+
+  const [
+    deleteTask,
+    {
+      isLoading: deletingTask,
+    },
+  ] = useDeleteTaskMutation();
+
+
+  // =========================================================
+  // CREATE TASK STATE
   // =========================================================
 
   const [
@@ -239,12 +321,16 @@ export default function BoardPage() {
   const [
     taskPriority,
     setTaskPriority,
-  ] = useState<
-    "LOW" | "MEDIUM" | "HIGH"
-  >("MEDIUM");
+  ] = useState<Priority>("MEDIUM");
+
+  const [
+    taskAssigneeId,
+    setTaskAssigneeId,
+  ] = useState("");
+
 
   // =========================================================
-  // TASK EDIT STATE
+  // EDIT TASK STATE
   // =========================================================
 
   const [
@@ -265,21 +351,21 @@ export default function BoardPage() {
   const [
     editTaskPriority,
     setEditTaskPriority,
-  ] = useState<
-    "LOW" | "MEDIUM" | "HIGH"
-  >("MEDIUM");
+  ] = useState<Priority>("MEDIUM");
 
   const [
     editTaskStatus,
     setEditTaskStatus,
-  ] = useState<
-    "TODO" |
-    "IN_PROGRESS" |
-    "DONE"
-  >("TODO");
+  ] = useState<TaskStatus>("TODO");
+
+  const [
+    editTaskAssigneeId,
+    setEditTaskAssigneeId,
+  ] = useState("");
+
 
   // =========================================================
-  // TASK DELETE STATE
+  // DELETE TASK STATE
   // =========================================================
 
   const [
@@ -287,30 +373,6 @@ export default function BoardPage() {
     setDeletingTaskId,
   ] = useState<string | null>(null);
 
-  // =========================================================
-  // TASK MUTATIONS
-  // =========================================================
-
-  const [
-    createTask,
-    {
-      isLoading: creatingTask,
-    },
-  ] = useCreateTaskMutation();
-
-  const [
-    updateTask,
-    {
-      isLoading: updatingTask,
-    },
-  ] = useUpdateTaskMutation();
-
-  const [
-    deleteTask,
-    {
-      isLoading: deletingTask,
-    },
-  ] = useDeleteTaskMutation();
 
   // =========================================================
   // DATA
@@ -322,69 +384,71 @@ export default function BoardPage() {
 
   const members = membersData?.data ?? [];
 
+
   // =========================================================
   // ADD MEMBER
   // =========================================================
 
-  const handleAddMember = async () => {
-    const trimmedUserId = userId.trim();
-
-    if (!trimmedUserId) {
-      return;
-    }
+  const handleAddMember = async (selectedUserId: string) => {
+    if (!selectedUserId) return;
 
     try {
       await addMember({
         boardId,
-        userId: trimmedUserId,
+        userId: selectedUserId,
       }).unwrap();
 
-      setUserId("");
-      setShowAddMemberModal(false);
+      toast.success("Member added successfully");
     } catch (error) {
-      console.error(
-        "Failed to add member:",
-        error
-      );
-
-      alert(
-        "Failed to add member. Make sure the user exists and is not already a member."
-      );
+      console.error("Failed to add member:", error);
+      toast.error("Failed to add member");
     }
   };
+
 
   // =========================================================
   // REMOVE MEMBER
   // =========================================================
 
   const handleRemoveMember = async (
-    memberId: string
+    memberUserId: string
   ) => {
     try {
-      setRemovingMemberId(memberId);
+      setRemovingMemberId(
+        memberUserId
+      );
 
       await removeMember({
         boardId,
-        userId: memberId,
+        userId: memberUserId,
       }).unwrap();
+     
+      toast.success("Member remove successfully")
+
+
     } catch (error) {
       console.error(
         "Failed to remove member:",
         error
       );
 
-      alert("Failed to remove member.");
+      toast.error(
+        "Failed to remove member."
+      );
+
     } finally {
       setRemovingMemberId(null);
     }
   };
+
 
   // =========================================================
   // CREATE COLUMN
   // =========================================================
 
   const handleCreateColumn = async () => {
-    const name = columnName.trim();
+    const name =
+      columnName.trim();
 
     if (!name) {
       return;
@@ -398,20 +462,29 @@ export default function BoardPage() {
 
       setColumnName("");
       setShowColumnModal(false);
+
+      toast.success("column create successfully")
+
     } catch (error) {
       console.error(
         "Failed to create column:",
         error
       );
+
+      alert(
+        "Failed to create column."
+      );
     }
   };
+
 
   // =========================================================
   // UPDATE COLUMN
   // =========================================================
 
   const handleUpdateColumn = async () => {
-    const name = editingColumnName.trim();
+    const name =
+      editingColumnName.trim();
 
     if (!editingColumnId || !name) {
       return;
@@ -428,13 +501,20 @@ export default function BoardPage() {
 
       setEditingColumnId(null);
       setEditingColumnName("");
+      toast.success("column rename successfully")
+
     } catch (error) {
       console.error(
         "Failed to update column:",
         error
       );
+
+      alert(
+        "Failed to rename column."
+      );
     }
   };
+
 
   // =========================================================
   // DELETE COLUMN
@@ -452,6 +532,7 @@ export default function BoardPage() {
       }).unwrap();
 
       setDeletingColumnId(null);
+
     } catch (error) {
       console.error(
         "Failed to delete column:",
@@ -464,6 +545,33 @@ export default function BoardPage() {
     }
   };
 
+
+  // =========================================================
+  // REORDER COLUMN
+  // =========================================================
+
+  const handleReorderColumn = async (
+    columnId: string,
+    position: number
+  ): Promise<void> => {
+    try {
+      await reorderColumn({
+        columnId,
+        position,
+        boardId,
+      }).unwrap();
+
+    } catch (error) {
+      console.error(
+        "Failed to reorder column:",
+        error
+      );
+
+      throw error;
+    }
+  };
+
+
   // =========================================================
   // OPEN CREATE TASK MODAL
   // =========================================================
@@ -472,18 +580,45 @@ export default function BoardPage() {
     columnId: string
   ) => {
     setSelectedColumnId(columnId);
+
     setTaskTitle("");
+
     setTaskDescription("");
+
     setTaskPriority("MEDIUM");
+
+    setTaskAssigneeId("");
+
     setShowTaskModal(true);
   };
+
+
+  // =========================================================
+  // CLOSE CREATE TASK MODAL
+  // =========================================================
+
+  const closeCreateTaskModal = () => {
+    setShowTaskModal(false);
+
+    setSelectedColumnId(null);
+
+    setTaskTitle("");
+
+    setTaskDescription("");
+
+    setTaskPriority("MEDIUM");
+
+    setTaskAssigneeId("");
+  };
+
 
   // =========================================================
   // CREATE TASK
   // =========================================================
 
   const handleCreateTask = async () => {
-    const title = taskTitle.trim();
+    const title =
+      taskTitle.trim();
 
     if (!title || !selectedColumnId) {
       return;
@@ -494,22 +629,26 @@ export default function BoardPage() {
         boardId,
         columnId: selectedColumnId,
         title,
-        description: taskDescription.trim(),
+        description:
+          taskDescription.trim(),
         priority: taskPriority,
+        assigneeId: taskAssigneeId || undefined,
       }).unwrap();
+      toast.success("task create successfully")
+      closeCreateTaskModal();
 
-      setTaskTitle("");
-      setTaskDescription("");
-      setTaskPriority("MEDIUM");
-      setSelectedColumnId(null);
-      setShowTaskModal(false);
     } catch (error) {
       console.error(
         "Failed to create task:",
         error
       );
+
+      alert(
+        "Failed to create task."
+      );
     }
   };
+
 
   // =========================================================
   // OPEN EDIT TASK MODAL
@@ -518,14 +657,52 @@ export default function BoardPage() {
   const openEditTaskModal = (
     task: ColumnTask
   ) => {
+    const taskWithAssignee =
+      task as TaskWithAssignee;
+
     setEditingTask(task);
-    setEditTaskTitle(task.title);
+
+    setEditTaskTitle(
+      task.title
+    );
+
     setEditTaskDescription(
       task.description ?? ""
     );
-    setEditTaskPriority(task.priority);
-    setEditTaskStatus(task.status);
+
+    setEditTaskPriority(
+      task.priority
+    );
+
+    setEditTaskStatus(
+      task.status
+    );
+
+    setEditTaskAssigneeId(
+      taskWithAssignee.assignee?.id ??
+        ""
+    );
   };
+
+
+  // =========================================================
+  // CLOSE EDIT TASK MODAL
+  // =========================================================
+
+  const closeEditTaskModal = () => {
+    setEditingTask(null);
+
+    setEditTaskTitle("");
+
+    setEditTaskDescription("");
+
+    setEditTaskPriority("MEDIUM");
+
+    setEditTaskStatus("TODO");
+
+    setEditTaskAssigneeId("");
+  };
+
 
   // =========================================================
   // UPDATE TASK
@@ -536,7 +713,8 @@ export default function BoardPage() {
       return;
     }
 
-    const title = editTaskTitle.trim();
+    const title =
+      editTaskTitle.trim();
 
     if (!title) {
       return;
@@ -546,27 +724,39 @@ export default function BoardPage() {
       await updateTask({
         taskId: editingTask.id,
         boardId,
+
         data: {
           title,
+
           description:
             editTaskDescription.trim(),
-          priority: editTaskPriority,
-          status: editTaskStatus,
+
+          priority:
+            editTaskPriority,
+
+          status:
+            editTaskStatus,
+
+          assigneeId:
+            editTaskAssigneeId || null,
         },
       }).unwrap();
+      toast.success("Task completed  successfully")
 
-      setEditingTask(null);
-      setEditTaskTitle("");
-      setEditTaskDescription("");
-      setEditTaskPriority("MEDIUM");
-      setEditTaskStatus("TODO");
+      closeEditTaskModal();
+
     } catch (error) {
       console.error(
         "Failed to update task:",
         error
       );
+
+      toast.error(
+        "Failed to update task."
+      );
     }
   };
+
 
   // =========================================================
   // DELETE TASK
@@ -584,41 +774,22 @@ export default function BoardPage() {
       }).unwrap();
 
       setDeletingTaskId(null);
+
+      toast.success("task delete successfully")
+
     } catch (error) {
       console.error(
         "Failed to delete task:",
         error
       );
 
-      alert("Failed to delete task.");
+      alert(
+        "Failed to delete task."
+      );
     }
   };
 
 
-  // =========================================================
-// REORDER COLUMN
-// =========================================================
-
-  const [
-  reorderColumn,
-    { isLoading: reorderingColumn },
-  ] = useReorderColumnMutation();
-  
-  const handleReorderColumn = async (
-  columnId: string,
-  position: number
-): Promise<void> => {
-  try {
-    await reorderColumn({
-      columnId,
-      position,
-      boardId,
-    }).unwrap();
-  } catch (error) {
-    console.error("Failed to reorder column:", error);
-    throw error;
-  }
-  };
   // =========================================================
   // LOADING
   // =========================================================
@@ -630,6 +801,7 @@ export default function BoardPage() {
     return (
       <main className="min-h-screen bg-slate-900 p-6">
         <div className="mx-auto max-w-7xl">
+
           <div className="animate-pulse space-y-6">
 
             <div className="h-8 w-48 rounded bg-slate-700" />
@@ -637,19 +809,25 @@ export default function BoardPage() {
             <div className="h-5 w-96 rounded bg-slate-700" />
 
             <div className="flex gap-5 overflow-hidden">
-              {[1, 2, 3].map((item) => (
-                <div
-                  key={item}
-                  className="h-96 w-80 shrink-0 rounded-xl bg-slate-800"
-                />
-              ))}
+
+              {[1, 2, 3].map(
+                (item) => (
+                  <div
+                    key={item}
+                    className="h-96 w-80 shrink-0 rounded-xl bg-slate-800"
+                  />
+                )
+              )}
+
             </div>
 
           </div>
+
         </div>
       </main>
     );
   }
+
 
   // =========================================================
   // ERROR
@@ -662,6 +840,7 @@ export default function BoardPage() {
   ) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-900 p-6">
+
         <div className="text-center">
 
           <h1 className="text-xl font-semibold text-white">
@@ -677,15 +856,17 @@ export default function BoardPage() {
             onClick={() =>
               router.push("/dashboard")
             }
-            className="mt-5 rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-slate-900"
+            className="mt-5 rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-slate-900 hover:cursor-pointer"
           >
             Back to Dashboard
           </button>
 
         </div>
+
       </main>
     );
   }
+
 
   // =========================================================
   // UI
@@ -699,6 +880,7 @@ export default function BoardPage() {
       ===================================================== */}
 
       <header className="border-b border-slate-800 bg-slate-900">
+
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
 
           <button
@@ -706,26 +888,34 @@ export default function BoardPage() {
             onClick={() =>
               router.push("/dashboard")
             }
-            className="flex items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-white"
+            className="flex items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-white cursor-pointer"
           >
             <ArrowLeft size={18} />
+
             Dashboard
           </button>
+
 
           <button
             type="button"
             onClick={() => {
-              localStorage.removeItem("token");
+              localStorage.removeItem(
+                "token"
+              );
 
-              router.replace("/login");
+              router.replace(
+                "/login"
+              );
             }}
-            className="text-sm font-medium text-red-500 transition hover:text-red-400"
+            className="cursor-pointer text-sm font-medium text-red-500 transition hover:text-red-400 "
           >
             Logout
           </button>
 
         </div>
+
       </header>
+
 
       {/* =====================================================
           BOARD INFO
@@ -736,6 +926,7 @@ export default function BoardPage() {
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
 
           <div>
+
             <h1 className="text-3xl font-bold text-white">
               {board.name}
             </h1>
@@ -745,16 +936,16 @@ export default function BoardPage() {
                 {board.description}
               </p>
             )}
+
           </div>
 
-          {/* MEMBERS BUTTON */}
 
           <button
             type="button"
             onClick={() =>
               setShowMembersModal(true)
             }
-            className="flex shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+            className="flex shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-100 cursor-pointer"
           >
             <Users size={18} />
 
@@ -763,11 +954,13 @@ export default function BoardPage() {
             <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs">
               {members.length}
             </span>
+
           </button>
 
         </div>
 
       </section>
+
 
       {/* =====================================================
           KANBAN
@@ -781,22 +974,50 @@ export default function BoardPage() {
 
             <KanbanBoard
               columns={columns}
-              onAddTask={openCreateTaskModal}
-              onEditColumn={(column: Column) => {
-                setEditingColumnId(column.id);
-                setEditingColumnName(column.name);
+
+              onAddTask={
+                openCreateTaskModal
+              }
+
+              onEditColumn={(
+                column: Column
+              ) => {
+                setEditingColumnId(
+                  column.id
+                );
+
+                setEditingColumnName(
+                  column.name
+                );
               }}
-              onDeleteColumn={(columnId: string) => {
-                setDeletingColumnId(columnId);
+
+              onDeleteColumn={(
+                columnId: string
+              ) => {
+                setDeletingColumnId(
+                  columnId
+                );
               }}
-              onEditTask={openEditTaskModal}
-              onDeleteTask={(taskId: string) => {
-                setDeletingTaskId(taskId);
+
+              onEditTask={
+                openEditTaskModal
+              }
+
+              onDeleteTask={(
+                taskId: string
+              ) => {
+                setDeletingTaskId(
+                  taskId
+                );
               }}
-              onReorderColumn={handleReorderColumn}
+
+              onReorderColumn={
+                handleReorderColumn
+              }
             />
 
           </div>
+
 
           {/* ADD COLUMN */}
 
@@ -805,7 +1026,8 @@ export default function BoardPage() {
             onClick={() =>
               setShowColumnModal(true)
             }
-            className="flex h-fit w-80 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-700 bg-slate-800 p-6 text-sm font-medium text-slate-400 transition hover:border-slate-500 hover:text-white"
+            disabled={reorderingColumn}
+            className="flex h-fit w-80 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-700 bg-slate-800 p-6 text-sm font-medium text-slate-400 transition hover:border-slate-500 cursor-pointer hover:text-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus size={18} />
 
@@ -816,6 +1038,7 @@ export default function BoardPage() {
 
       </section>
 
+
       {/* =====================================================
           MEMBERS MODAL
       ===================================================== */}
@@ -823,12 +1046,16 @@ export default function BoardPage() {
       {showMembersModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onMouseDown={(event) => {
+          onMouseDown={(
+            event
+          ) => {
             if (
               event.target ===
               event.currentTarget
             ) {
-              setShowMembersModal(false);
+              setShowMembersModal(
+                false
+              );
             }
           }}
         >
@@ -840,6 +1067,7 @@ export default function BoardPage() {
             <div className="flex items-center justify-between">
 
               <div>
+
                 <h2 className="text-lg font-semibold text-slate-900">
                   Board Members
                 </h2>
@@ -847,44 +1075,55 @@ export default function BoardPage() {
                 <p className="mt-1 text-sm text-slate-500">
                   Manage members of this board
                 </p>
+
               </div>
+
 
               <button
                 type="button"
                 onClick={() =>
-                  setShowMembersModal(false)
+                  setShowMembersModal(
+                    false
+                  )
                 }
-                className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
               >
                 <X size={18} />
               </button>
 
             </div>
 
-            {/* MEMBERS LIST */}
+
+            {/* MEMBER LIST */}
 
             <div className="mt-6">
 
               {membersLoading ? (
                 <div className="space-y-3">
 
-                  {[1, 2].map((item) => (
-                    <div
-                      key={item}
-                      className="animate-pulse rounded-xl bg-slate-100 p-4"
-                    >
-                      <div className="h-4 w-40 rounded bg-slate-200" />
+                  {[1, 2].map(
+                    (item) => (
+                      <div
+                        key={item}
+                        className="animate-pulse rounded-xl bg-slate-100 p-4"
+                      >
+                        <div className="h-4 w-40 rounded bg-slate-200" />
 
-                      <div className="mt-2 h-3 w-56 rounded bg-slate-200" />
-                    </div>
-                  ))}
+                        <div className="mt-2 h-3 w-56 rounded bg-slate-200" />
+                      </div>
+                    )
+                  )}
 
                 </div>
+
               ) : membersError ? (
+
                 <div className="rounded-xl bg-red-50 p-4 text-sm text-red-600">
                   Unable to load board members.
                 </div>
+
               ) : members.length === 0 ? (
+
                 <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center">
 
                   <Users
@@ -901,29 +1140,15 @@ export default function BoardPage() {
                   </p>
 
                 </div>
+
               ) : (
+
                 <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
 
-                  {members.map((member: any) => {
-                    const memberUser =
-                      member.user ?? member;
-
-                    const memberId =
-                      member.userId ??
-                      member.id;
-
-                    const memberName =
-                      memberUser.name ??
-                      memberUser.username ??
-                      "Unknown User";
-
-                    const memberEmail =
-                      memberUser.email ??
-                      "No email available";
-
-                    return (
+                  {members.map(
+                    (member) => (
                       <div
-                        key={memberId}
+                        key={member.id}
                         className="flex items-center justify-between rounded-xl border border-slate-200 p-4"
                       >
 
@@ -933,58 +1158,65 @@ export default function BoardPage() {
                             <Users size={18} />
                           </div>
 
+
                           <div className="min-w-0">
 
                             <p className="truncate text-sm font-semibold text-slate-900">
-                              {memberName}
+                              {member.user.name}
                             </p>
 
                             <p className="truncate text-xs text-slate-500">
-                              {memberEmail}
+                              {member.user.email}
                             </p>
 
                           </div>
 
                         </div>
 
+
                         <button
                           type="button"
                           onClick={() =>
                             handleRemoveMember(
-                              memberId
+                              member.userId
                             )
                           }
                           disabled={
                             removingMemberId ===
-                            memberId
+                            member.userId
                           }
-                          className="ml-3 flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="ml-3 flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-red-600  transition hover:bg-red-50 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                         >
+
                           <Trash2 size={14} />
 
                           {removingMemberId ===
-                          memberId
+                          member.userId
                             ? "Removing..."
                             : "Remove"}
+
                         </button>
 
                       </div>
-                    );
-                  })}
+                    )
+                  )}
 
                 </div>
               )}
 
             </div>
 
+
             {/* ADD MEMBER */}
 
             <button
               type="button"
               onClick={() =>
-                setShowAddMemberModal(true)
+                setShowAddMemberModal(
+                  true
+                )
               }
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 cursor-pointer"
             >
               <UserPlus size={17} />
 
@@ -996,122 +1228,124 @@ export default function BoardPage() {
         </div>
       )}
 
+
       {/* =====================================================
           ADD MEMBER MODAL
       ===================================================== */}
 
       {showAddMemberModal && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
-          onMouseDown={(event) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              setShowAddMemberModal(false);
-            }
-          }}
-        >
-
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-
-            <div className="flex items-center justify-between">
-
-              <h2 className="text-lg font-semibold text-slate-900">
-                Add Member
-              </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Add Member
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Select a registered user to add to this board.
+                </p>
+              </div>
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowAddMemberModal(false);
-                  setUserId("");
-                }}
-                className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                onClick={() => setShowAddMemberModal(false)}
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
               >
-                <X size={18} />
+                <X size={20} />
               </button>
-
             </div>
 
-            <div className="mt-5">
+            <div className="max-h-[500px] overflow-y-auto p-4">
+              {usersLoading ? (
+                <div className="py-10 text-center text-sm text-slate-500">
+                  Loading registered users...
+                </div>
+              ) : usersError ? (
+                <div className="rounded-lg bg-red-50 p-4 text-center text-sm text-red-600">
+                  Failed to load registered users.
+                </div>
+              ) : allUsers.length === 0 ? (
+                <div className="py-10 text-center text-sm text-slate-500">
+                  No registered users found.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                 {allUsers.map((user) => {
+                    const isBoardOwner = board?.ownerId === user.id;
 
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                User ID
-              </label>
-
-              <input
-                value={userId}
-                onChange={(event) =>
-                  setUserId(
-                    event.target.value
-                  )
-                }
-                onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter" &&
-                    userId.trim()
-                  ) {
-                    handleAddMember();
-                  }
-
-                  if (
-                    event.key === "Escape"
-                  ) {
-                    setShowAddMemberModal(
-                      false
+                    const alreadyMember = members.some(
+                      (member) => member.userId === user.id
                     );
-                  }
-                }}
-                placeholder="Enter user ID"
-                className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-900"
-                autoFocus
-              />
 
-              <p className="mt-2 text-xs text-slate-400">
-                Enter the ID of the user you want to add to this board.
-              </p>
+                    return (
+                      <div
+                        key={user.id}
+                        className={`flex items-center justify-between rounded-lg border p-3 ${
+                          isBoardOwner
+                            ? "border-blue-200 bg-blue-50/50"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-semibold ${
+                              isBoardOwner
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-slate-200 text-slate-700"
+                            }`}
+                          >
+                            {user.name.charAt(0).toUpperCase()}
+                          </div>
 
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate font-medium text-slate-900">
+                                {user.name}
+                              </p>
+
+                              {isBoardOwner && (
+                                <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                                  Admin
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="truncate text-sm text-slate-500">
+                              {user.email}
+                            </p>
+ 
+                          </div>
+                        </div>
+
+                        {isBoardOwner ? (
+                          <span className="ml-3 shrink-0 rounded-lg bg-blue-100 px-3 py-2 text-sm font-medium text-blue-700">
+                            Admin
+                          </span>
+                        ) : alreadyMember ? (
+                          <span className="ml-3 shrink-0 rounded-lg bg-green-100 px-3 py-2 text-sm font-medium text-green-700">
+                            Added
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={addingMember}
+                            onClick={() => handleAddMember(user.id)}
+                            className="ml-3 flex shrink-0 items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <UserPlus size={15} />
+                            {addingMember ? "Adding..." : "Add"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddMemberModal(
-                    false
-                  );
-
-                  setUserId("");
-                }}
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  handleAddMember
-                }
-                disabled={
-                  addingMember ||
-                  !userId.trim()
-                }
-                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {addingMember
-                  ? "Adding..."
-                  : "Add Member"}
-              </button>
-
-            </div>
-
           </div>
-
         </div>
       )}
+
 
       {/* =====================================================
           CREATE COLUMN MODAL
@@ -1128,59 +1362,81 @@ export default function BoardPage() {
                 Create Column
               </h2>
 
+
               <button
                 type="button"
                 onClick={() => {
-                  setShowColumnModal(false);
+                  setShowColumnModal(
+                    false
+                  );
+
                   setColumnName("");
                 }}
-                className="rounded-md p-2 hover:bg-slate-100"
+                className="rounded-md p-2 hover:bg-slate-100 cursor-pointer"
               >
                 <X size={18} />
               </button>
 
             </div>
 
+
             <input
               value={columnName}
               onChange={(e) =>
-                setColumnName(e.target.value)
+                setColumnName(
+                  e.target.value
+                )
               }
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+
+                if (
+                  e.key === "Enter"
+                ) {
                   handleCreateColumn();
                 }
 
-                if (e.key === "Escape") {
-                  setShowColumnModal(false);
+                if (
+                  e.key === "Escape"
+                ) {
+                  setShowColumnModal(
+                    false
+                  );
                 }
+
               }}
               placeholder="Column name"
               className="mt-5 w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
               autoFocus
             />
 
+
             <div className="mt-5 flex justify-end gap-3">
 
               <button
                 type="button"
                 onClick={() => {
-                  setShowColumnModal(false);
+                  setShowColumnModal(
+                    false
+                  );
+
                   setColumnName("");
                 }}
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 Cancel
               </button>
 
+
               <button
                 type="button"
-                onClick={handleCreateColumn}
+                onClick={
+                  handleCreateColumn
+                }
                 disabled={
                   creatingColumn ||
                   !columnName.trim()
                 }
-                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 hover:cursor-pointer"
               >
                 {creatingColumn
                   ? "Creating..."
@@ -1193,6 +1449,7 @@ export default function BoardPage() {
 
         </div>
       )}
+
 
       {/* =====================================================
           RENAME COLUMN MODAL
@@ -1209,18 +1466,25 @@ export default function BoardPage() {
                 Rename Column
               </h2>
 
+
               <button
                 type="button"
                 onClick={() => {
-                  setEditingColumnId(null);
-                  setEditingColumnName("");
+                  setEditingColumnId(
+                    null
+                  );
+
+                  setEditingColumnName(
+                    ""
+                  );
                 }}
-                className="rounded-md p-2 hover:bg-slate-100"
+                className="rounded-md p-2 hover:bg-slate-100 cursor-pointer"
               >
                 <X size={18} />
               </button>
 
             </div>
+
 
             <input
               value={editingColumnName}
@@ -1230,40 +1494,60 @@ export default function BoardPage() {
                 )
               }
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+
+                if (
+                  e.key === "Enter"
+                ) {
                   handleUpdateColumn();
                 }
 
-                if (e.key === "Escape") {
-                  setEditingColumnId(null);
-                  setEditingColumnName("");
+                if (
+                  e.key === "Escape"
+                ) {
+                  setEditingColumnId(
+                    null
+                  );
+
+                  setEditingColumnName(
+                    ""
+                  );
                 }
+
               }}
               className="mt-5 w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
               autoFocus
             />
+
 
             <div className="mt-5 flex justify-end gap-3">
 
               <button
                 type="button"
                 onClick={() => {
-                  setEditingColumnId(null);
-                  setEditingColumnName("");
+                  setEditingColumnId(
+                    null
+                  );
+
+                  setEditingColumnName(
+                    ""
+                  );
                 }}
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 Cancel
               </button>
 
+
               <button
                 type="button"
-                onClick={handleUpdateColumn}
+                onClick={
+                  handleUpdateColumn
+                }
                 disabled={
                   updatingColumn ||
                   !editingColumnName.trim()
                 }
-                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 hover:cursor-pointer"
               >
                 {updatingColumn
                   ? "Saving..."
@@ -1276,6 +1560,7 @@ export default function BoardPage() {
 
         </div>
       )}
+
 
       {/* =====================================================
           DELETE COLUMN MODAL
@@ -1292,40 +1577,52 @@ export default function BoardPage() {
                 Delete Column?
               </h2>
 
+
               <button
                 type="button"
                 onClick={() =>
-                  setDeletingColumnId(null)
+                  setDeletingColumnId(
+                    null
+                  )
                 }
-                className="rounded-md p-2 hover:bg-slate-100"
+                className="rounded-md p-2 hover:bg-slate-100 cursor-pointer"
               >
                 <X size={18} />
               </button>
 
             </div>
 
+
             <p className="mt-3 text-sm leading-6 text-slate-500">
               This column can only be deleted
               when it has no tasks.
             </p>
+
 
             <div className="mt-6 flex justify-end gap-3">
 
               <button
                 type="button"
                 onClick={() =>
-                  setDeletingColumnId(null)
+                  setDeletingColumnId(
+                    null
+                  )
                 }
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 Cancel
               </button>
 
+
               <button
                 type="button"
-                onClick={handleDeleteColumn}
-                disabled={deletingColumn}
-                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={
+                  handleDeleteColumn
+                }
+                disabled={
+                  deletingColumn
+                }
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {deletingColumn
                   ? "Deleting..."
@@ -1338,6 +1635,7 @@ export default function BoardPage() {
 
         </div>
       )}
+
 
       {/* =====================================================
           CREATE TASK MODAL
@@ -1354,38 +1652,38 @@ export default function BoardPage() {
                 Create Task
               </h2>
 
+
               <button
                 type="button"
-                onClick={() => {
-                  setShowTaskModal(false);
-                  setSelectedColumnId(null);
-                }}
-                className="rounded-md p-2 hover:bg-slate-100"
+                onClick={
+                  closeCreateTaskModal
+                }
+                className="rounded-md p-2 hover:bg-slate-100 cursor-pointer"
               >
                 <X size={18} />
               </button>
 
             </div>
 
+
             <div className="mt-5 space-y-4">
+
+              {/* TITLE */}
 
               <input
                 value={taskTitle}
                 onChange={(e) =>
-                  setTaskTitle(e.target.value)
+                  setTaskTitle(
+                    e.target.value
+                  )
                 }
-                onKeyDown={(e) => {
-                  if (
-                    e.key === "Enter" &&
-                    taskTitle.trim()
-                  ) {
-                    handleCreateTask();
-                  }
-                }}
                 placeholder="Task title"
                 className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
                 autoFocus
               />
+
+
+              {/* DESCRIPTION */}
 
               <textarea
                 value={taskDescription}
@@ -1399,24 +1697,26 @@ export default function BoardPage() {
                 className="w-full resize-none rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
               />
 
+
+              {/* PRIORITY */}
+
               <div>
 
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">
                   Priority
                 </label>
 
+
                 <select
                   value={taskPriority}
                   onChange={(e) =>
                     setTaskPriority(
-                      e.target.value as
-                        | "LOW"
-                        | "MEDIUM"
-                        | "HIGH"
+                      e.target.value as Priority
                     )
                   }
                   className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
                 >
+
                   <option value="LOW">
                     Low Priority
                   </option>
@@ -1428,33 +1728,91 @@ export default function BoardPage() {
                   <option value="HIGH">
                     High Priority
                   </option>
+
                 </select>
+
+              </div>
+
+
+              {/* ASSIGNEE */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Assign To
+                </label>
+
+
+                <select
+                  value={taskAssigneeId}
+                  onChange={(e) =>
+                    setTaskAssigneeId(
+                      e.target.value
+                    )
+                  }
+                  disabled={
+                    membersLoading
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-100"
+                >
+
+                  <option value="">
+                    Unassigned
+                  </option>
+
+
+                  {members.map(
+                    (member) => (
+                      <option
+                        key={
+                          member.userId
+                        }
+                        value={
+                          member.userId
+                        }
+                      >
+                        {member.user.name}
+                        {" — "}
+                        {member.user.email}
+                      </option>
+                    )
+                  )}
+
+                </select>
+
+
+                <p className="mt-1.5 text-xs text-slate-400">
+                  Select a board member to assign this task.
+                </p>
 
               </div>
 
             </div>
 
+
             <div className="mt-6 flex justify-end gap-3">
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowTaskModal(false);
-                  setSelectedColumnId(null);
-                }}
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                onClick={
+                  closeCreateTaskModal
+                }
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 Cancel
               </button>
 
+
               <button
                 type="button"
-                onClick={handleCreateTask}
+                onClick={
+                  handleCreateTask
+                }
                 disabled={
                   creatingTask ||
                   !taskTitle.trim()
                 }
-                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 hover:cursor-pointer"
               >
                 {creatingTask
                   ? "Creating..."
@@ -1467,6 +1825,7 @@ export default function BoardPage() {
 
         </div>
       )}
+
 
       {/* =====================================================
           EDIT TASK MODAL
@@ -1483,19 +1842,23 @@ export default function BoardPage() {
                 Edit Task
               </h2>
 
+
               <button
                 type="button"
-                onClick={() =>
-                  setEditingTask(null)
+                onClick={
+                  closeEditTaskModal
                 }
-                className="rounded-md p-2 hover:bg-slate-100"
+                className="rounded-md p-2 hover:bg-slate-100 cursor-pointer"
               >
                 <X size={18} />
               </button>
 
             </div>
 
+
             <div className="mt-5 space-y-4">
+
+              {/* TITLE */}
 
               <input
                 value={editTaskTitle}
@@ -1504,13 +1867,18 @@ export default function BoardPage() {
                     e.target.value
                   )
                 }
-                className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
                 placeholder="Task title"
+                className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
                 autoFocus
               />
 
+
+              {/* DESCRIPTION */}
+
               <textarea
-                value={editTaskDescription}
+                value={
+                  editTaskDescription
+                }
                 onChange={(e) =>
                   setEditTaskDescription(
                     e.target.value
@@ -1521,24 +1889,28 @@ export default function BoardPage() {
                 className="w-full resize-none rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
               />
 
+
+              {/* PRIORITY */}
+
               <div>
 
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">
                   Priority
                 </label>
 
+
                 <select
-                  value={editTaskPriority}
+                  value={
+                    editTaskPriority
+                  }
                   onChange={(e) =>
                     setEditTaskPriority(
-                      e.target.value as
-                        | "LOW"
-                        | "MEDIUM"
-                        | "HIGH"
+                      e.target.value as Priority
                     )
                   }
                   className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
                 >
+
                   <option value="LOW">
                     Low Priority
                   </option>
@@ -1550,9 +1922,13 @@ export default function BoardPage() {
                   <option value="HIGH">
                     High Priority
                   </option>
+
                 </select>
 
               </div>
+
+
+              {/* STATUS */}
 
               <div>
 
@@ -1560,18 +1936,19 @@ export default function BoardPage() {
                   Status
                 </label>
 
+
                 <select
-                  value={editTaskStatus}
+                  value={
+                    editTaskStatus
+                  }
                   onChange={(e) =>
                     setEditTaskStatus(
-                      e.target.value as
-                        | "TODO"
-                        | "IN_PROGRESS"
-                        | "DONE"
+                      e.target.value as TaskStatus
                     )
                   }
                   className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
                 >
+
                   <option value="TODO">
                     To Do
                   </option>
@@ -1583,32 +1960,88 @@ export default function BoardPage() {
                   <option value="DONE">
                     Done
                   </option>
+
+                </select>
+
+              </div>
+
+
+              {/* ASSIGNEE */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Assign To
+                </label>
+
+
+                <select
+                  value={
+                    editTaskAssigneeId
+                  }
+                  onChange={(e) =>
+                    setEditTaskAssigneeId(
+                      e.target.value
+                    )
+                  }
+                  disabled={
+                    membersLoading
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-100"
+                >
+
+                  <option value="">
+                    Unassigned
+                  </option>
+
+
+                  {members.map(
+                    (member) => (
+                      <option
+                        key={
+                          member.userId
+                        }
+                        value={
+                          member.userId
+                        }
+                      >
+                        {member.user.name}
+                        {" — "}
+                        {member.user.email}
+                      </option>
+                    )
+                  )}
+
                 </select>
 
               </div>
 
             </div>
 
+
             <div className="mt-6 flex justify-end gap-3">
 
               <button
                 type="button"
-                onClick={() =>
-                  setEditingTask(null)
+                onClick={
+                  closeEditTaskModal
                 }
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 Cancel
               </button>
 
+
               <button
                 type="button"
-                onClick={handleUpdateTask}
+                onClick={
+                  handleUpdateTask
+                }
                 disabled={
                   updatingTask ||
                   !editTaskTitle.trim()
                 }
-                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 hover:cursor-pointer"
               >
                 {updatingTask
                   ? "Saving..."
@@ -1621,6 +2054,7 @@ export default function BoardPage() {
 
         </div>
       )}
+
 
       {/* =====================================================
           DELETE TASK MODAL
@@ -1637,17 +2071,21 @@ export default function BoardPage() {
                 Delete Task?
               </h2>
 
+
               <button
                 type="button"
                 onClick={() =>
-                  setDeletingTaskId(null)
+                  setDeletingTaskId(
+                    null
+                  )
                 }
-                className="rounded-md p-2 hover:bg-slate-100"
+                className="rounded-md p-2 hover:bg-slate-100 cursor-pointer"
               >
                 <X size={18} />
               </button>
 
             </div>
+
 
             <p className="mt-3 text-sm leading-6 text-slate-500">
               Are you sure you want to delete
@@ -1655,23 +2093,31 @@ export default function BoardPage() {
               undone.
             </p>
 
+
             <div className="mt-6 flex justify-end gap-3">
 
               <button
                 type="button"
                 onClick={() =>
-                  setDeletingTaskId(null)
+                  setDeletingTaskId(
+                    null
+                  )
                 }
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 Cancel
               </button>
 
+
               <button
                 type="button"
-                onClick={handleDeleteTask}
-                disabled={deletingTask}
-                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={
+                  handleDeleteTask
+                }
+                disabled={
+                  deletingTask
+                }
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-red-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {deletingTask
                   ? "Deleting..."
@@ -1688,4 +2134,3 @@ export default function BoardPage() {
     </main>
   );
 }
- 

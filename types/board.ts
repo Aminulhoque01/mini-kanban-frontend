@@ -1,6 +1,12 @@
 export interface Board {
   id: string;
   name: string;
+  ownerId: string;
+  owner: {
+    id: string;
+    name: string;
+    email: string;
+  };
   description?: string | null;
   createdAt: string;
   updatedAt: string;

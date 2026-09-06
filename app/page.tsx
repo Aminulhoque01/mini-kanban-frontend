@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-950">
@@ -10,9 +12,11 @@ export default function Home() {
           Frontend setup is working 🚀
         </p>
 
-        <button className="mt-6 rounded-lg bg-blue-600 px-5 py-3 font-medium text-white transition hover:bg-blue-700">
-          Get Started
-        </button>
+      <Link href="/login">
+              <button className="cursor-pointer mt-6 rounded-lg bg-blue-600 px-5 py-3 font-medium text-white transition hover:bg-blue-700">
+                Get Started
+              </button>
+      </Link>
       </div>
     </main>
   );
