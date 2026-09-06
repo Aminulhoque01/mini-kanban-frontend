@@ -11,6 +11,7 @@ import {
 import {
   logout,
   setCredentials,
+  setToken,
 } from "@/redux/features/auth/authSlice";
 
 import {
@@ -51,6 +52,18 @@ export default function DashboardPage() {
   } = useGetMeQuery(undefined, {
     skip: !token,
   });
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem("token");
+
+    if (!storedToken) {
+      router.replace("/login");
+      return;
+    }
+
+    // localStorage → Redux
+    dispatch(setToken(storedToken));
+  }, [dispatch, router]);
 
   // =========================
   // Boards

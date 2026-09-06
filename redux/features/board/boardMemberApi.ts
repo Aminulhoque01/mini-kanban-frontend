@@ -1,5 +1,9 @@
 import { baseApi } from "../api/baseApi";
 
+// ============================================
+// BOARD MEMBER TYPES
+// ============================================
+
 export interface BoardMemberUser {
   id: string;
   name: string;
@@ -32,104 +36,95 @@ export interface RemoveMemberResponse {
   message: string;
 }
 
-export const boardMemberApi =
-  baseApi.injectEndpoints({
-    endpoints: (builder) => ({
-      // ============================================
-      // GET BOARD MEMBERS
-      // ============================================
+ 
 
-      getBoardMembers: builder.query<
-        BoardMembersResponse,
-        string
-      >({
-        query: (boardId) => ({
-          url: `/api/boards/${boardId}/members`,
-          method: "GET",
-        }),
 
-        providesTags: (
-          _result,
-          _error,
-          boardId
-        ) => [
-          {
-            type: "User",
-            id: `BOARD-MEMBERS-${boardId}`,
-          },
-        ],
+// ============================================
+// BOARD MEMBER API
+// ============================================
+
+export const boardMemberApi = baseApi.injectEndpoints({
+  endpoints: (builder) => ({
+    // ========================================
+    // GET BOARD MEMBERS
+    // ========================================
+
+    getBoardMembers: builder.query<BoardMembersResponse, string>({
+      query: (boardId) => ({
+        url: `/api/boards/${boardId}/members`,
+        method: "GET",
       }),
 
-      // ============================================
-      // ADD MEMBER
-      // ============================================
-
-      addBoardMember: builder.mutation<
-        AddMemberResponse,
+      providesTags: (_result, _error, boardId) => [
         {
-          boardId: string;
-          userId: string;
-        }
-      >({
-        query: ({
-          boardId,
-          userId,
-        }) => ({
-          url: `/api/boards/${boardId}/members`,
-          method: "POST",
-          body: {
-            userId,
-          },
-        }),
+          type: "User",
+          id: `BOARD-MEMBERS-${boardId}`,
+        },
+      ],
+    }),
 
-        invalidatesTags: (
-          _result,
-          _error,
-          { boardId }
-        ) => [
-          {
-            type: "User",
-            id: `BOARD-MEMBERS-${boardId}`,
-          },
-        ],
+    // ========================================
+    // ADD MEMBER
+    // ========================================
+
+    addBoardMember: builder.mutation<
+      AddMemberResponse,
+      {
+        boardId: string;
+        userId: string;
+      }
+    >({
+      query: ({ boardId, userId }) => ({
+        url: `/api/boards/${boardId}/members`,
+        method: "POST",
+        body: {
+          userId,
+        },
       }),
 
-      // ============================================
-      // REMOVE MEMBER
-      // ============================================
-
-      removeBoardMember:
-        builder.mutation<
-          RemoveMemberResponse,
-          {
-            boardId: string;
-            userId: string;
-          }
-        >({
-          query: ({
-            boardId,
-            userId,
-          }) => ({
-            url: `/api/boards/${boardId}/members/${userId}`,
-            method: "DELETE",
-          }),
-
-          invalidatesTags: (
-            _result,
-            _error,
-            { boardId }
-          ) => [
-            {
-              type: "User",
-              id: `BOARD-MEMBERS-${boardId}`,
-            },
-          ],
-        }),
+      invalidatesTags: (_result, _error, { boardId }) => [
+        {
+          type: "User",
+          id: `BOARD-MEMBERS-${boardId}`,
+        },
+      ],
     }),
-  });
+
+    // ========================================
+    // REMOVE MEMBER
+    // ========================================
+
+    removeBoardMember: builder.mutation<
+      RemoveMemberResponse,
+      {
+        boardId: string;
+        userId: string;
+      }
+    >({
+      query: ({ boardId, userId }) => ({
+        url: `/api/boards/${boardId}/members/${userId}`,
+        method: "DELETE",
+      }),
+
+      invalidatesTags: (_result, _error, { boardId }) => [
+        {
+          type: "User",
+          id: `BOARD-MEMBERS-${boardId}`,
+        },
+      ],
+    }),
+
+  
+  }),
+});
+
+// ============================================
+// HOOKS
+// ============================================
 
 export const {
   useGetBoardMembersQuery,
   useAddBoardMemberMutation,
   useRemoveBoardMemberMutation,
+   
 } = boardMemberApi;

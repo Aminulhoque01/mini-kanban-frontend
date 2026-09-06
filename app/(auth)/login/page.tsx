@@ -1,5 +1,7 @@
+ 
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,6 +26,11 @@ export default function LoginPage() {
 
   const [login, { isLoading }] = useLoginMutation();
 
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<
+    "success" | "error" | ""
+  >("");
+
   const {
     register,
     handleSubmit,
@@ -33,25 +40,45 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (data: LoginFormData) => {
-    try {
-      const response = await login(data).unwrap();
+  setMessage("");
+  setMessageType("");
 
-      const { user, token } = response.data;
+  try {
+    const response = await login(data).unwrap();
 
-      localStorage.setItem("token", token);
+    const { user, token } = response.data;
 
-      dispatch(
-        setCredentials({
-          user,
-          token,
-        })
-      );
+    // Save token
+    localStorage.setItem("token", token);
 
-      router.push("/dashboard");
-    } catch (error) {
-      console.error("Login failed:", error);
-    }
-  };
+    // Save current user + token in Redux
+    dispatch(
+      setCredentials({
+        user,
+        token,
+      })
+    );
+
+    // Success message
+    setMessage("Login successful! Redirecting...");
+    setMessageType("success");
+
+    // Full page reload
+    setTimeout(() => {
+      window.location.href = "/dashboard";
+    }, 500);
+  } catch (error: any) {
+    console.error("Login failed:", error);
+
+    const errorMessage =
+      error?.data?.message ||
+      error?.error ||
+      "Invalid email or password. Please try again.";
+
+    setMessage(errorMessage);
+    setMessageType("error");
+  }
+};
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
@@ -66,9 +93,24 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-          {/* Email */}
+        {/* Message */}
+        {message && (
+          <div
+            className={`mb-5 rounded-lg border px-4 py-3 text-sm ${
+              messageType === "success"
+                ? "border-green-500/30 bg-green-500/10 text-green-400"
+                : "border-red-500/30 bg-red-500/10 text-red-400"
+            }`}
+          >
+            {message}
+          </div>
+        )}
 
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="space-y-5"
+        >
+          {/* Email */}
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-200">
               Email
@@ -89,7 +131,6 @@ export default function LoginPage() {
           </div>
 
           {/* Password */}
-
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-200">
               Password
@@ -110,7 +151,6 @@ export default function LoginPage() {
           </div>
 
           {/* Submit */}
-
           <button
             type="submit"
             disabled={isLoading}
@@ -134,3 +174,4 @@ export default function LoginPage() {
     </main>
   );
 }
+ 
