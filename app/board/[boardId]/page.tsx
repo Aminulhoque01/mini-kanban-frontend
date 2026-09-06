@@ -1,7 +1,13 @@
+
+
+
+
+
 "use client";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useDispatch, useSelector } from "react-redux";
 
 import {
   ArrowLeft,
@@ -10,9 +16,6 @@ import {
   Users,
   UserPlus,
   Trash2,
-  Search,
-  Check,
-  AlertCircle,
 } from "lucide-react";
 
 import { useGetBoardQuery } from "@/redux/features/board/boardApi";
@@ -28,13 +31,13 @@ import {
   useCreateColumnMutation,
   useUpdateColumnMutation,
   useDeleteColumnMutation,
+  useReorderColumnMutation,
 } from "@/redux/features/column/columnApi";
 
 import {
   useGetBoardMembersQuery,
   useAddBoardMemberMutation,
   useRemoveBoardMemberMutation,
-  
 } from "@/redux/features/board/boardMemberApi";
 
 import {
@@ -42,19 +45,19 @@ import {
   useAppSelector,
 } from "@/redux/hooks";
 
-import { setToken } from "@/redux/features/auth/authSlice";
+
 
 import type { ColumnTask, Column } from "@/types/column";
 
 import KanbanBoard from "@/components/board/KanbanBoard";
-import { useGetUsersQuery } from "@/redux/features/auth/authApi";
+import { setToken } from "@/redux/features/auth/authSlice";
 
 export default function BoardPage() {
   const router = useRouter();
   const params = useParams();
-  const dispatch = useAppDispatch();
 
   const boardId = params.boardId as string;
+    const dispatch = useDispatch();
 
   // =========================================================
   // AUTH
@@ -132,55 +135,6 @@ export default function BoardPage() {
   ] = useRemoveBoardMemberMutation();
 
   // =========================================================
-  // USER SEARCH
-  // =========================================================
-
-    const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-  
-
-  const [memberSearch, setMemberSearch] = useState("");
-  const [userPage, setUserPage] = useState(1);
-
-  const {
-    data: usersData,
-    isLoading: usersLoading,
-    isFetching: usersFetching,
-    isError: usersError,
-  } = useGetUsersQuery(
-    {
-      page: userPage,
-      limit: 10,
-      search: memberSearch.trim(),
-    },
-    {
-      skip: !token || !showAddMemberModal,
-    }
-  );
-
-  // =========================================================
-  // TOAST
-  // =========================================================
-
-  const [toast, setToast] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!toast) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setToast(null);
-    }, 3000);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [toast]);
-
-  // =========================================================
   // MEMBERS STATE
   // =========================================================
 
@@ -189,7 +143,15 @@ export default function BoardPage() {
     setShowMembersModal,
   ] = useState(false);
 
+  const [
+    showAddMemberModal,
+    setShowAddMemberModal,
+  ] = useState(false);
 
+  const [
+    userId,
+    setUserId,
+  ] = useState("");
 
   const [
     removingMemberId,
@@ -359,52 +321,35 @@ export default function BoardPage() {
   const columns = columnsData?.data ?? [];
 
   const members = membersData?.data ?? [];
-  const users = usersData?.data ?? [];
-  const usersPagination = usersData?.pagination;
-
-  const memberUserIds = new Set(
-    members.map((member) => member.userId)
-  );
 
   // =========================================================
   // ADD MEMBER
   // =========================================================
 
-  const handleAddMember = async (selectedUserId: string) => {
-    if (!selectedUserId) {
-      return;
-    }
+  const handleAddMember = async () => {
+    const trimmedUserId = userId.trim();
 
-    if (memberUserIds.has(selectedUserId)) {
-      setToast({
-        type: "error",
-        message: "This user is already a member of this board.",
-      });
+    if (!trimmedUserId) {
       return;
     }
 
     try {
       await addMember({
         boardId,
-        userId: selectedUserId,
+        userId: trimmedUserId,
       }).unwrap();
 
-      setToast({
-        type: "success",
-        message: "Member added successfully.",
-      });
-    } catch (error: any) {
-      console.error("Failed to add member:", error);
+      setUserId("");
+      setShowAddMemberModal(false);
+    } catch (error) {
+      console.error(
+        "Failed to add member:",
+        error
+      );
 
-      const message =
-        error?.data?.message ||
-        error?.error ||
-        "Failed to add member. Please try again.";
-
-      setToast({
-        type: "error",
-        message,
-      });
+      alert(
+        "Failed to add member. Make sure the user exists and is not already a member."
+      );
     }
   };
 
@@ -422,23 +367,13 @@ export default function BoardPage() {
         boardId,
         userId: memberId,
       }).unwrap();
+    } catch (error) {
+      console.error(
+        "Failed to remove member:",
+        error
+      );
 
-      setToast({
-        type: "success",
-        message: "Member removed successfully.",
-      });
-    } catch (error: any) {
-      console.error("Failed to remove member:", error);
-
-      const message =
-        error?.data?.message ||
-        error?.error ||
-        "Failed to remove member.";
-
-      setToast({
-        type: "error",
-        message,
-      });
+      alert("Failed to remove member.");
     } finally {
       setRemovingMemberId(null);
     }
@@ -659,6 +594,31 @@ export default function BoardPage() {
     }
   };
 
+
+  // =========================================================
+// REORDER COLUMN
+// =========================================================
+
+  const [
+  reorderColumn,
+    { isLoading: reorderingColumn },
+  ] = useReorderColumnMutation();
+  
+  const handleReorderColumn = async (
+  columnId: string,
+  position: number
+): Promise<void> => {
+  try {
+    await reorderColumn({
+      columnId,
+      position,
+      boardId,
+    }).unwrap();
+  } catch (error) {
+    console.error("Failed to reorder column:", error);
+    throw error;
+  }
+  };
   // =========================================================
   // LOADING
   // =========================================================
@@ -813,50 +773,27 @@ export default function BoardPage() {
           KANBAN
       ===================================================== */}
 
-      <section className="mx-auto max-w-7xl px-6 pb-10">
+      <section className="mx-auto max-w-7xl px-6 pb-12">
 
-        <div className="flex items-start gap-5">
+        <div className="flex items-start gap-8 overflow-x-auto pb-4">
 
           <div className="min-w-0 flex-1">
 
             <KanbanBoard
               columns={columns}
-
-              onAddTask={
-                openCreateTaskModal
-              }
-
-              onEditColumn={(
-                column: Column
-              ) => {
-                setEditingColumnId(
-                  column.id
-                );
-
-                setEditingColumnName(
-                  column.name
-                );
+              onAddTask={openCreateTaskModal}
+              onEditColumn={(column: Column) => {
+                setEditingColumnId(column.id);
+                setEditingColumnName(column.name);
               }}
-
-              onDeleteColumn={(
-                columnId: string
-              ) => {
-                setDeletingColumnId(
-                  columnId
-                );
+              onDeleteColumn={(columnId: string) => {
+                setDeletingColumnId(columnId);
               }}
-
-              onEditTask={
-                openEditTaskModal
-              }
-
-              onDeleteTask={(
-                taskId: string
-              ) => {
-                setDeletingTaskId(
-                  taskId
-                );
+              onEditTask={openEditTaskModal}
+              onDeleteTask={(taskId: string) => {
+                setDeletingTaskId(taskId);
               }}
+              onReorderColumn={handleReorderColumn}
             />
 
           </div>
@@ -868,7 +805,7 @@ export default function BoardPage() {
             onClick={() =>
               setShowColumnModal(true)
             }
-            className="flex h-fit w-80 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-700 bg-slate-800 p-5 text-sm font-medium text-slate-400 transition hover:border-slate-500 hover:text-white"
+            className="flex h-fit w-80 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-700 bg-slate-800 p-6 text-sm font-medium text-slate-400 transition hover:border-slate-500 hover:text-white"
           >
             <Plus size={18} />
 
@@ -880,52 +817,6 @@ export default function BoardPage() {
       </section>
 
       {/* =====================================================
-          TOAST
-      ===================================================== */}
-
-      {toast && (
-        <div className="fixed right-4 top-4 z-[100] w-full max-w-sm">
-          <div
-            className={`flex items-start gap-3 rounded-xl border p-4 shadow-2xl ${
-              toast.type === "success"
-                ? "border-emerald-200 bg-emerald-50"
-                : "border-red-200 bg-red-50"
-            }`}
-          >
-            {toast.type === "success" ? (
-              <Check
-                size={20}
-                className="mt-0.5 shrink-0 text-emerald-600"
-              />
-            ) : (
-              <AlertCircle
-                size={20}
-                className="mt-0.5 shrink-0 text-red-600"
-              />
-            )}
-
-            <p
-              className={`flex-1 text-sm font-medium ${
-                toast.type === "success"
-                  ? "text-emerald-700"
-                  : "text-red-700"
-              }`}
-            >
-              {toast.message}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => setToast(null)}
-              className="shrink-0 text-slate-400 hover:text-slate-700"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* =====================================================
           MEMBERS MODAL
       ===================================================== */}
 
@@ -933,15 +824,21 @@ export default function BoardPage() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
               setShowMembersModal(false);
             }
           }}
         >
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
+
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+
             {/* HEADER */}
 
             <div className="flex items-center justify-between">
+
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
                   Board Members
@@ -954,38 +851,34 @@ export default function BoardPage() {
 
               <button
                 type="button"
-                onClick={() => setShowMembersModal(false)}
+                onClick={() =>
+                  setShowMembersModal(false)
+                }
                 className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
               >
                 <X size={18} />
               </button>
+
             </div>
 
-            {/* CURRENT MEMBERS */}
+            {/* MEMBERS LIST */}
 
             <div className="mt-6">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-900">
-                  Current Members
-                </h3>
-
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                  {members.length} member
-                  {members.length === 1 ? "" : "s"}
-                </span>
-              </div>
 
               {membersLoading ? (
                 <div className="space-y-3">
+
                   {[1, 2].map((item) => (
                     <div
                       key={item}
                       className="animate-pulse rounded-xl bg-slate-100 p-4"
                     >
                       <div className="h-4 w-40 rounded bg-slate-200" />
+
                       <div className="mt-2 h-3 w-56 rounded bg-slate-200" />
                     </div>
                   ))}
+
                 </div>
               ) : membersError ? (
                 <div className="rounded-xl bg-red-50 p-4 text-sm text-red-600">
@@ -993,6 +886,7 @@ export default function BoardPage() {
                 </div>
               ) : members.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center">
+
                   <Users
                     size={28}
                     className="mx-auto text-slate-400"
@@ -1003,31 +897,44 @@ export default function BoardPage() {
                   </p>
 
                   <p className="mt-1 text-xs text-slate-400">
-                    Add a registered user to collaborate on this board.
+                    Add a member to collaborate on this board.
                   </p>
+
                 </div>
               ) : (
-                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
-                  {members.map((member) => {
-                    const memberId = member.userId;
+                <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+
+                  {members.map((member: any) => {
+                    const memberUser =
+                      member.user ?? member;
+
+                    const memberId =
+                      member.userId ??
+                      member.id;
+
                     const memberName =
-                      member.user?.name ?? "Unknown User";
+                      memberUser.name ??
+                      memberUser.username ??
+                      "Unknown User";
+
                     const memberEmail =
-                      member.user?.email ?? "No email available";
+                      memberUser.email ??
+                      "No email available";
 
                     return (
                       <div
-                        key={member.id}
+                        key={memberId}
                         className="flex items-center justify-between rounded-xl border border-slate-200 p-4"
                       >
+
                         <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 font-semibold text-slate-600">
-                            {memberName
-                              .charAt(0)
-                              .toUpperCase()}
+
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                            <Users size={18} />
                           </div>
 
                           <div className="min-w-0">
+
                             <p className="truncate text-sm font-semibold text-slate-900">
                               {memberName}
                             </p>
@@ -1035,47 +942,57 @@ export default function BoardPage() {
                             <p className="truncate text-xs text-slate-500">
                               {memberEmail}
                             </p>
+
                           </div>
+
                         </div>
 
                         <button
                           type="button"
                           onClick={() =>
-                            handleRemoveMember(memberId)
+                            handleRemoveMember(
+                              memberId
+                            )
                           }
                           disabled={
-                            removingMemberId === memberId
+                            removingMemberId ===
+                            memberId
                           }
                           className="ml-3 flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <Trash2 size={14} />
 
-                          {removingMemberId === memberId
+                          {removingMemberId ===
+                          memberId
                             ? "Removing..."
                             : "Remove"}
                         </button>
+
                       </div>
                     );
                   })}
+
                 </div>
               )}
+
             </div>
 
             {/* ADD MEMBER */}
 
             <button
               type="button"
-              onClick={() => {
-                setMemberSearch("");
-                setUserPage(1);
-                setShowAddMemberModal(true);
-              }}
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+              onClick={() =>
+                setShowAddMemberModal(true)
+              }
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               <UserPlus size={17} />
+
               Add Member
             </button>
+
           </div>
+
         </div>
       )}
 
@@ -1087,209 +1004,112 @@ export default function BoardPage() {
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
               setShowAddMemberModal(false);
             }
           }}
         >
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
-            {/* HEADER */}
+
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
 
             <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Add Member
-                </h2>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Search registered users and add them to this board.
-                </p>
-              </div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Add Member
+              </h2>
 
               <button
                 type="button"
                 onClick={() => {
                   setShowAddMemberModal(false);
-                  setMemberSearch("");
-                  setUserPage(1);
+                  setUserId("");
                 }}
                 className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
               >
                 <X size={18} />
               </button>
+
             </div>
 
-            {/* SEARCH */}
+            <div className="mt-5">
 
-            <div className="relative mt-5">
-              <Search
-                size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                User ID
+              </label>
 
               <input
-                type="text"
-                value={memberSearch}
-                onChange={(event) => {
-                  setMemberSearch(event.target.value);
-                  setUserPage(1);
+                value={userId}
+                onChange={(event) =>
+                  setUserId(
+                    event.target.value
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    userId.trim()
+                  ) {
+                    handleAddMember();
+                  }
+
+                  if (
+                    event.key === "Escape"
+                  ) {
+                    setShowAddMemberModal(
+                      false
+                    );
+                  }
                 }}
-                placeholder="Search by name or email..."
-                className="w-full rounded-lg border border-slate-200 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-900"
+                placeholder="Enter user ID"
+                className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-900"
                 autoFocus
               />
+
+              <p className="mt-2 text-xs text-slate-400">
+                Enter the ID of the user you want to add to this board.
+              </p>
+
             </div>
 
-            {/* USER LIST */}
+            <div className="mt-6 flex justify-end gap-3">
 
-            <div className="mt-4 min-h-[240px]">
-              {usersLoading || usersFetching ? (
-                <div className="space-y-2">
-                  {[1, 2, 3].map((item) => (
-                    <div
-                      key={item}
-                      className="animate-pulse rounded-xl bg-slate-100 p-4"
-                    >
-                      <div className="h-4 w-44 rounded bg-slate-200" />
-                      <div className="mt-2 h-3 w-60 rounded bg-slate-200" />
-                    </div>
-                  ))}
-                </div>
-              ) : usersError ? (
-                <div className="rounded-xl bg-red-50 p-4 text-sm text-red-600">
-                  Unable to load users. Please try again.
-                </div>
-              ) : users.length === 0 ? (
-                <div className="flex min-h-[240px] items-center justify-center rounded-xl border border-dashed border-slate-200">
-                  <div className="text-center">
-                    <Users
-                      size={28}
-                      className="mx-auto text-slate-400"
-                    />
-
-                    <p className="mt-3 text-sm font-medium text-slate-700">
-                      No users found
-                    </p>
-
-                    <p className="mt-1 text-xs text-slate-400">
-                      Try searching with another name or email.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                  {users.map((user) => {
-                    const alreadyMember = memberUserIds.has(
-                      user.id
-                    );
-
-                    return (
-                      <div
-                        key={user.id}
-                        className="flex items-center justify-between rounded-xl border border-slate-200 p-4 transition hover:border-slate-300"
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 font-semibold text-slate-600">
-                            {user.name
-                              .charAt(0)
-                              .toUpperCase()}
-                          </div>
-
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-900">
-                              {user.name}
-                            </p>
-
-                            <p className="truncate text-xs text-slate-500">
-                              {user.email}
-                            </p>
-                          </div>
-                        </div>
-
-                        {alreadyMember ? (
-                          <span className="ml-3 flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-600">
-                            <Check size={14} />
-                            Added
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleAddMember(user.id)
-                            }
-                            disabled={addingMember}
-                            className="ml-3 flex shrink-0 items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            <UserPlus size={14} />
-
-                            {addingMember
-                              ? "Adding..."
-                              : "Add"}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* PAGINATION */}
-
-            {usersPagination &&
-              usersPagination.totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
-                  <button
-                    type="button"
-                    disabled={
-                      !usersPagination.hasPreviousPage ||
-                      usersFetching
-                    }
-                    onClick={() =>
-                      setUserPage((page) => page - 1)
-                    }
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Previous
-                  </button>
-
-                  <span className="text-xs text-slate-500">
-                    Page {usersPagination.page} of{" "}
-                    {usersPagination.totalPages}
-                  </span>
-
-                  <button
-                    type="button"
-                    disabled={
-                      !usersPagination.hasNextPage ||
-                      usersFetching
-                    }
-                    onClick={() =>
-                      setUserPage((page) => page + 1)
-                    }
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
-
-            {/* CLOSE */}
-
-            <div className="mt-5 flex justify-end">
               <button
                 type="button"
                 onClick={() => {
-                  setShowAddMemberModal(false);
-                  setMemberSearch("");
-                  setUserPage(1);
+                  setShowAddMemberModal(
+                    false
+                  );
+
+                  setUserId("");
                 }}
                 className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
               >
-                Done
+                Cancel
               </button>
+
+              <button
+                type="button"
+                onClick={
+                  handleAddMember
+                }
+                disabled={
+                  addingMember ||
+                  !userId.trim()
+                }
+                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {addingMember
+                  ? "Adding..."
+                  : "Add Member"}
+              </button>
+
             </div>
+
           </div>
+
         </div>
       )}
 
@@ -1868,3 +1688,4 @@ export default function BoardPage() {
     </main>
   );
 }
+ 

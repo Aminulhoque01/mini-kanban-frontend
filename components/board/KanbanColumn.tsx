@@ -59,7 +59,7 @@ export default function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-[320px] min-w-[320px] flex-col rounded-xl bg-slate-100 p-3 transition ${
+      className={`flex gap-8 w-[320px] min-w-[320px] flex-col rounded-xl bg-slate-100 p-3 transition ${
         isOver
           ? "ring-2 ring-blue-400"
           : ""
